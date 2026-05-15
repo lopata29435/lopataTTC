@@ -1,0 +1,133 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    permissions:
+      contents: write
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: 'Windows x86_64'
+            os: 'windows-latest'
+            rust_target: 'x86_64-pc-windows-msvc'
+            client_os: 'windows'
+            client_arch: 'x86_64'
+            tauri_args: '--target x86_64-pc-windows-msvc'
+
+          - label: 'Windows i686 (32-bit)'
+            os: 'windows-latest'
+            rust_target: 'i686-pc-windows-msvc'
+            client_os: 'windows'
+            client_arch: 'i686'
+            tauri_args: '--target i686-pc-windows-msvc'
+
+          - label: 'Windows aarch64 (ARM64)'
+            os: 'windows-latest'
+            rust_target: 'aarch64-pc-windows-msvc'
+            client_os: 'windows'
+            client_arch: 'aarch64'
+            tauri_args: '--target aarch64-pc-windows-msvc'
+
+          - label: 'macOS universal'
+            os: 'macos-latest'
+            rust_target: 'aarch64-apple-darwin,x86_64-apple-darwin'
+            client_os: 'macos'
+            client_arch: 'universal'
+            tauri_args: '--target universal-apple-darwin'
+
+          - label: 'Linux x86_64'
+            os: 'ubuntu-22.04'
+            rust_target: 'x86_64-unknown-linux-gnu'
+            client_os: 'linux'
+            client_arch: 'x86_64'
+            tauri_args: ''
+
+          - label: 'Linux aarch64'
+            os: 'ubuntu-22.04'
+            rust_target: 'aarch64-unknown-linux-gnu'
+            client_os: 'linux'
+            client_arch: 'aarch64'
+            tauri_args: '--target aarch64-unknown-linux-gnu'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+          key: ${{ matrix.rust_target }}
+
+      - name: Install Linux build deps (x86_64)
+        if: matrix.client_os == 'linux' && matrix.client_arch == 'x86_64'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libssl-dev libgtk-3-dev \
+            libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - name: Install Linux build deps (aarch64 cross)
+        if: matrix.client_os == 'linux' && matrix.client_arch == 'aarch64'
+        run: |
+          sudo dpkg --add-architecture arm64
+          sudo bash -c 'cat > /etc/apt/sources.list.d/arm64.list <<EOF
+          deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports jammy main restricted universe multiverse
+          deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports jammy-updates main restricted universe multiverse
+          EOF'
+          sudo sed -i 's|^deb |deb [arch=amd64] |g' /etc/apt/sources.list
+          sudo apt-get update || true
+          sudo apt-get install -y \
+            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+            libwebkit2gtk-4.1-dev:arm64 libssl-dev:arm64 libgtk-3-dev:arm64 \
+            libayatana-appindicator3-dev:arm64 librsvg2-dev:arm64 patchelf
+          echo 'CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc' >> $GITHUB_ENV
+          echo 'PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig' >> $GITHUB_ENV
+          echo 'PKG_CONFIG_SYSROOT_DIR=/' >> $GITHUB_ENV
+          echo 'PKG_CONFIG_ALLOW_CROSS=1' >> $GITHUB_ENV
+
+      - name: Fetch TrustTunnel client binary (POSIX)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          chmod +x scripts/fetch-client.sh
+          scripts/fetch-client.sh --os ${{ matrix.client_os }} --arch ${{ matrix.client_arch }}
+
+      - name: Fetch TrustTunnel client binary (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          .\scripts\fetch-client.ps1 -Os ${{ matrix.client_os }} -Arch ${{ matrix.client_arch }}
+
+      - name: Build & upload via tauri-action
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'TrustTunnel GUI ${{ github.ref_name }}'
+          releaseBody: |
+            Автоматический релиз. Установщики:
+            - Windows: `.msi` / `.exe` (NSIS)
+            - macOS: `.dmg`
+            - Linux: `.AppImage` / `.deb` / `.rpm`
+
+            Встроенный `trusttunnel_client` подкачивается из релизов TrustTunnel автоматически
+            при первом запуске, если в системе нет новой версии.
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.tauri_args }}

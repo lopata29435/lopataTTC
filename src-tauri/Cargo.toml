@@ -1,0 +1,61 @@
+[package]
+name = "trusttunnel-gui"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "trusttunnel_gui_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-shell = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-deep-link = "2"
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+tauri-plugin-fs = "2"
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+base64 = "0.22"
+tokio = { version = "1", features = ["full"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+directories = "5"
+regex = "1"
+once_cell = "1"
+urlencoding = "2"
+anyhow = "1"
+thiserror = "1"
+chrono = { version = "0.4", features = ["serde"] }
+url = "2"
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls-native-roots"] }
+zip = { version = "2", default-features = false, features = ["deflate"] }
+flate2 = "1"
+tar = "0.4"
+futures-util = "0.3"
+semver = "1"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_System_Threading",
+    "Win32_System_Console",
+    "Win32_Security",
+    "Win32_System_Services",
+] }
+windows-service = "0.7"
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

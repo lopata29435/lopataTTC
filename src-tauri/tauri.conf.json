@@ -1,0 +1,62 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "TrustTunnel",
+  "version": "0.1.0",
+  "identifier": "org.trusttunnel.gui",
+  "build": {
+    "frontendDist": "../src"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "TrustTunnel",
+        "width": 920,
+        "height": 640,
+        "minWidth": 720,
+        "minHeight": 520,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": true,
+        "transparent": false,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src ipc: http://ipc.localhost"
+    },
+    "trayIcon": {
+      "iconPath": "icons/tray.png",
+      "iconAsTemplate": false
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "resources": [
+      "resources/*"
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "perMachine"
+      }
+    },
+    "longDescription": "Десктопный клиент протокола TrustTunnel с системным треем и поддержкой deeplink.",
+    "shortDescription": "TrustTunnel VPN client",
+    "category": "Utility"
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["tt"]
+      }
+    }
+  }
+}

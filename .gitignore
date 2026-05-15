@@ -1,0 +1,32 @@
+# Rust / Cargo
+src-tauri/target/
+src-tauri/gen/schemas/
+
+# Build artifacts
+**/.DS_Store
+*.log
+
+# Node (in case frontend gains build tooling later)
+node_modules/
+dist/
+.vite/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Local downloads — CI fetches these on each build
+src-tauri/resources/trusttunnel_client
+src-tauri/resources/trusttunnel_client.exe
+src-tauri/resources/wintun.dll
+src-tauri/resources/*.tar.gz
+src-tauri/resources/*.zip
+
+# Local app icon source (regeneratable)
+app-icon.png
+
+# Local run logs
+run.log
+build*.log
+BUILD.MD

@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TrustTunnel</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark"></div>
+          <div class="brand-name">TrustTunnel</div>
+        </div>
+        <nav class="nav">
+          <button class="nav-item active" data-tab="home">
+            <span class="icon icon-connect"></span><span>Подключение</span>
+          </button>
+          <button class="nav-item" data-tab="profiles">
+            <span class="icon icon-servers"></span><span>Серверы</span>
+          </button>
+          <button class="nav-item" data-tab="settings">
+            <span class="icon icon-settings"></span><span>Настройки</span>
+          </button>
+          <button class="nav-item" data-tab="logs">
+            <span class="icon icon-logs"></span><span>Логи</span>
+          </button>
+        </nav>
+        <div class="elevation-warning" id="elevation-warning" hidden>
+          <strong>Нужны права администратора</strong>
+          <p>VPN-клиенту требуется admin для создания TUN-интерфейса и правил фаервола.</p>
+          <button class="btn primary full-width" id="restart-admin-btn">Перезапустить от админа</button>
+        </div>
+      </aside>
+
+      <main class="content">
+        <!-- HOME TAB -->
+        <section class="tab active" data-tab="home">
+          <div class="connect-wrap">
+            <button class="connect-btn" id="connect-btn" data-state="disconnected">
+              <span class="connect-btn-glow"></span>
+              <span class="connect-btn-ring"></span>
+              <span class="connect-btn-label" id="connect-btn-label">Подключиться</span>
+            </button>
+
+            <div class="status-line" id="status-line">Готово к подключению</div>
+            <div class="status-timer" id="status-timer"></div>
+
+            <div class="profile-picker">
+              <label class="picker-label">Активный сервер</label>
+              <div class="custom-select" id="active-profile-select" tabindex="0">
+                <button type="button" class="custom-select-trigger" id="active-profile-trigger">
+                  <span class="custom-select-value" id="active-profile-value">— нет серверов —</span>
+                  <span class="icon icon-chevron custom-select-chevron"></span>
+                </button>
+                <div class="custom-select-menu" id="active-profile-menu" hidden></div>
+              </div>
+            </div>
+          </div>
+          <div class="home-actions">
+            <button class="btn ghost" id="paste-deeplink-btn"><span class="icon icon-clipboard"></span>Импортировать из буфера</button>
+            <button class="btn ghost" id="import-file-btn"><span class="icon icon-file"></span>Импорт .toml</button>
+          </div>
+        </section>
+
+        <!-- PROFILES TAB -->
+        <section class="tab" data-tab="profiles">
+          <div class="tab-header">
+            <h2>Серверы</h2>
+            <div class="header-actions">
+              <button class="btn primary" id="new-profile-btn">+ Новый сервер</button>
+              <button class="btn ghost" id="profiles-import-btn">📋 Импорт tt://</button>
+            </div>
+          </div>
+          <div class="profile-list" id="profile-list"></div>
+        </section>
+
+        <!-- SETTINGS TAB -->
+        <section class="tab" data-tab="settings">
+          <div class="tab-header">
+            <h2>Настройки</h2>
+          </div>
+          <div class="settings-list">
+            <div class="setting-card">
+              <div class="setting-head">
+                <h3>Автозапуск (Windows-служба)</h3>
+                <p>VPN будет подниматься при загрузке системы, до входа пользователя.</p>
+              </div>
+              <div class="setting-controls">
+                <span class="badge" id="service-badge">Не установлена</span>
+                <button class="btn" id="service-install-btn">Установить</button>
+                <button class="btn ghost" id="service-uninstall-btn">Удалить</button>
+              </div>
+            </div>
+
+            <div class="setting-card">
+              <div class="setting-head">
+                <h3>Deeplink <code>tt://</code></h3>
+                <p>Регистрация схемы в реестре Windows. После регистрации клик по <code>tt://</code>-ссылке в браузере откроет TrustTunnel и попросит импортировать профиль.</p>
+              </div>
+              <div class="setting-controls">
+                <span class="badge" id="deeplink-badge">Статус неизвестен</span>
+                <button class="btn" id="deeplink-register-btn">Зарегистрировать tt://</button>
+                <button class="btn ghost" id="deeplink-test-btn">Тест: показать буфер</button>
+              </div>
+            </div>
+
+            <div class="setting-card">
+              <div class="setting-head">
+                <h3>Обновление клиента</h3>
+                <p>Установленная версия: <code id="update-current">…</code></p>
+                <p>Последняя на GitHub: <code id="update-latest">…</code></p>
+                <p id="update-progress-line" hidden>Скачивание: <span id="update-progress-text">0%</span></p>
+              </div>
+              <div class="setting-controls">
+                <span class="badge" id="update-badge">Проверка…</span>
+                <button class="btn primary" id="check-update-btn">Проверить</button>
+                <button class="btn" id="install-update-btn" hidden>Установить обновление</button>
+              </div>
+            </div>
+
+            <div class="setting-card">
+              <div class="setting-head">
+                <h3>Пути</h3>
+                <p>Бинарник: <code id="binary-path-info">…</code></p>
+                <p>Папка данных: <code id="data-path-info">…</code></p>
+              </div>
+              <div class="setting-controls">
+                <button class="btn ghost" id="copy-data-path-btn">Копировать путь</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- LOGS TAB -->
+        <section class="tab" data-tab="logs">
+          <div class="tab-header">
+            <h2>Логи клиента</h2>
+            <div class="header-actions">
+              <button class="btn ghost" id="logs-clear-btn">Очистить</button>
+            </div>
+          </div>
+          <pre class="log-view" id="log-view"></pre>
+        </section>
+      </main>
+    </div>
+
+    <!-- Profile edit modal -->
+    <div class="modal-backdrop" id="profile-modal" hidden>
+      <div class="modal">
+        <header class="modal-header">
+          <h3 id="profile-modal-title">Профиль сервера</h3>
+          <button class="modal-close" id="profile-modal-close">×</button>
+        </header>
+        <div class="modal-tabs">
+          <button class="modal-tab active" data-modal-tab="form">Форма</button>
+          <button class="modal-tab" data-modal-tab="toml">TOML</button>
+        </div>
+        <div class="modal-body">
+          <div class="modal-section active" data-modal-section="form">
+            <div class="form-grid">
+              <label>Название
+                <input id="f-name" type="text" placeholder="Germany VPN" />
+              </label>
+              <label>Hostname
+                <input id="f-hostname" type="text" placeholder="vpn.example.com" />
+              </label>
+              <label>Адрес (host:port)
+                <input id="f-address" type="text" placeholder="vpn.example.com:443" />
+              </label>
+              <label>Пользователь
+                <input id="f-username" type="text" />
+              </label>
+              <label>Пароль
+                <div class="input-with-button">
+                  <input id="f-password" type="password" />
+                  <button type="button" class="input-icon-btn" id="f-password-toggle" title="Показать/скрыть" aria-label="Показать пароль">
+                    <span class="icon icon-eye-open" id="f-password-icon"></span>
+                  </button>
+                </div>
+              </label>
+              <label>SNI (опционально)
+                <input id="f-sni" type="text" />
+              </label>
+              <label>Протокол
+                <select id="f-protocol">
+                  <option value="http2">HTTP/2 (TCP)</option>
+                  <option value="http3">HTTP/3 (QUIC/UDP)</option>
+                </select>
+              </label>
+              <label>VPN-режим
+                <select id="f-vpn-mode">
+                  <option value="general">general — всё через VPN</option>
+                  <option value="selective">selective — только списки</option>
+                </select>
+              </label>
+              <label class="check">
+                <input id="f-anti-dpi" type="checkbox" />
+                <span>Anti-DPI</span>
+              </label>
+              <label class="check">
+                <input id="f-killswitch" type="checkbox" />
+                <span>Kill-switch</span>
+              </label>
+              <label class="check">
+                <input id="f-pq" type="checkbox" />
+                <span>Post-Quantum TLS</span>
+              </label>
+              <label class="check">
+                <input id="f-skip-verify" type="checkbox" />
+                <span>Не проверять сертификат</span>
+              </label>
+            </div>
+            <label class="full">DNS upstreams (по одной на строку)
+              <textarea id="f-dns" rows="3"></textarea>
+            </label>
+            <label class="full">
+              <span id="f-exclusions-label">Исключения (по одной на строку)</span>
+              <span id="f-exclusions-hint" class="field-hint">сайты, которые НЕ пойдут через VPN</span>
+              <textarea id="f-exclusions" rows="3" placeholder="*.ru&#10;ya.ru"></textarea>
+            </label>
+          </div>
+          <div class="modal-section" data-modal-section="toml">
+            <p class="toml-help">Прямое редактирование TOML. При сохранении переопределяет все поля формы.</p>
+            <textarea id="f-raw-toml" class="toml-editor" spellcheck="false"></textarea>
+          </div>
+        </div>
+        <footer class="modal-footer">
+          <button class="btn ghost" id="profile-modal-cancel">Отмена</button>
+          <button class="btn primary" id="profile-modal-save">Сохранить</button>
+        </footer>
+      </div>
+    </div>
+
+    <!-- Toast container -->
+    <div class="toasts" id="toasts"></div>
+
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
