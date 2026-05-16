@@ -21,9 +21,6 @@ use crate::profiles::ProfileStore;
 use crate::settings::SettingsStore;
 use crate::vpn::VpnService;
 
-/// Version of the bundled fallback binary (only meaningful on Windows x64 today).
-pub const BUNDLED_CLIENT_VERSION: &str = "1.0.49";
-
 pub struct AppState {
     pub profiles: Arc<ProfileStore>,
     pub vpn: Arc<VpnService>,
@@ -205,7 +202,7 @@ pub fn run() {
 /// `update://installed` so the UI can offer a switch.
 async fn auto_update_check(app: AppHandle, app_data_dir: PathBuf) -> anyhow::Result<()> {
     let release = updater::fetch_latest_release().await?;
-    let status = updater::build_status(&app_data_dir, BUNDLED_CLIENT_VERSION, Some(&release));
+    let status = updater::build_status(&app_data_dir, None, Some(&release));
     // Cache for the frontend (which may not be ready to receive the event yet)
     // and for the next launch.
     let state: tauri::State<AppState> = app.state();
@@ -233,7 +230,7 @@ async fn auto_update_check(app: AppHandle, app_data_dir: PathBuf) -> anyhow::Res
     *state.binary_path.lock().unwrap() = new_binary.clone();
     state.vpn.set_binary_path(new_binary.clone());
 
-    let final_status = updater::build_status(&app_data_dir, BUNDLED_CLIENT_VERSION, Some(&release));
+    let final_status = updater::build_status(&app_data_dir, None, Some(&release));
     let _ = app.emit("update://installed", &final_status);
     Ok(())
 }

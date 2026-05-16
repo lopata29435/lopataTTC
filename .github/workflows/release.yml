@@ -20,6 +20,7 @@ jobs:
           - label: 'Windows x86_64'
             os: 'windows-latest'
             rust_target: 'x86_64-pc-windows-msvc'
+            cache_key: 'win-x86_64'
             client_os: 'windows'
             client_arch: 'x86_64'
             tauri_args: '--target x86_64-pc-windows-msvc'
@@ -27,6 +28,7 @@ jobs:
           - label: 'Windows i686 (32-bit)'
             os: 'windows-latest'
             rust_target: 'i686-pc-windows-msvc'
+            cache_key: 'win-i686'
             client_os: 'windows'
             client_arch: 'i686'
             tauri_args: '--target i686-pc-windows-msvc'
@@ -34,6 +36,7 @@ jobs:
           - label: 'Windows aarch64 (ARM64)'
             os: 'windows-latest'
             rust_target: 'aarch64-pc-windows-msvc'
+            cache_key: 'win-aarch64'
             client_os: 'windows'
             client_arch: 'aarch64'
             tauri_args: '--target aarch64-pc-windows-msvc'
@@ -42,6 +45,7 @@ jobs:
           - label: 'macOS universal'
             os: 'macos-latest'
             rust_target: 'aarch64-apple-darwin,x86_64-apple-darwin'
+            cache_key: 'macos-universal'
             client_os: 'macos'
             client_arch: 'universal'
             tauri_args: '--target universal-apple-darwin'
@@ -50,6 +54,7 @@ jobs:
           - label: 'Linux x86_64'
             os: 'ubuntu-22.04'
             rust_target: 'x86_64-unknown-linux-gnu'
+            cache_key: 'linux-x86_64'
             client_os: 'linux'
             client_arch: 'x86_64'
             tauri_args: ''
@@ -61,6 +66,7 @@ jobs:
           - label: 'Linux aarch64'
             os: 'ubuntu-22.04-arm'
             rust_target: 'aarch64-unknown-linux-gnu'
+            cache_key: 'linux-aarch64'
             client_os: 'linux'
             client_arch: 'aarch64'
             tauri_args: ''
@@ -78,7 +84,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: './src-tauri -> target'
-          key: ${{ matrix.rust_target }}
+          key: ${{ matrix.cache_key }}
 
       - name: Install Linux build deps
         if: matrix.client_os == 'linux'
@@ -88,18 +94,15 @@ jobs:
             libwebkit2gtk-4.1-dev libssl-dev libgtk-3-dev \
             libayatana-appindicator3-dev librsvg2-dev patchelf
 
-      - name: Fetch TrustTunnel client binary (POSIX)
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          chmod +x scripts/fetch-client.sh
-          scripts/fetch-client.sh --os ${{ matrix.client_os }} --arch ${{ matrix.client_arch }}
-
-      - name: Fetch TrustTunnel client binary (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          .\scripts\fetch-client.ps1 -Os ${{ matrix.client_os }} -Arch ${{ matrix.client_arch }}
+      # NOTE: The TrustTunnel client binary is intentionally NOT bundled into the
+      # installer. The GUI downloads the latest release of
+      # https://github.com/TrustTunnel/TrustTunnelClient on first launch
+      # (see src-tauri/src/updater.rs). This keeps the installer small and the
+      # client always up-to-date without us cutting new GUI releases.
+      #
+      # If you ever want offline-capable first-launch, run
+      # `scripts/fetch-client.{sh,ps1}` here before `tauri-action` and bundle
+      # the result via tauri.conf.json -> bundle.resources.
 
       - name: Build & upload via tauri-action
         uses: tauri-apps/tauri-action@v0

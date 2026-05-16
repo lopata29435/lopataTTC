@@ -626,15 +626,28 @@ listen("update://progress", evt => {
   } else {
     $("#update-progress-text").textContent = formatBytes(done);
   }
+  // Also drive the first-launch overlay if visible.
+  if (!setupOverlay.hidden) setSetupProgress(done, total);
 });
 
 listen("update://status", evt => {
-  renderUpdateStatus(evt.payload);
+  const status = evt.payload || {};
+  renderUpdateStatus(status);
+  // First-launch: nothing installed yet → keep the setup overlay up.
+  if (status.needs_initial_install) {
+    showSetup();
+  }
 });
 
 listen("update://installed", evt => {
-  renderUpdateStatus(evt.payload);
-  toast(t("toast.updateInstalledBg", { version: evt.payload.current }), "success");
+  const status = evt.payload || {};
+  renderUpdateStatus(status);
+  if (!setupOverlay.hidden) {
+    hideSetup();
+    toast(t("toast.updateInstalled", { version: status.current }), "success");
+  } else {
+    toast(t("toast.updateInstalledBg", { version: status.current }), "success");
+  }
   refreshBinaryInfo();
 });
 
@@ -643,6 +656,59 @@ function formatBytes(n) {
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
+
+// ===== first-launch setup overlay =====
+const setupOverlay = $("#setup-overlay");
+
+function showSetup() {
+  setupOverlay.hidden = false;
+  setupOverlay.classList.remove("error");
+  $("#setup-title").textContent = t("setup.title");
+  $("#setup-body").textContent = t("setup.body");
+  $("#setup-progress").hidden = true;
+  $("#setup-progress-bar").style.width = "0%";
+  $("#setup-actions").hidden = true;
+  $("#setup-spinner").style.display = "block";
+  // While we're setting up, disable Connect.
+  $("#connect-btn").disabled = true;
+}
+function showSetupError() {
+  setupOverlay.hidden = false;
+  setupOverlay.classList.add("error");
+  $("#setup-title").textContent = t("setup.error.title");
+  $("#setup-body").textContent = t("setup.error.body", { size: "10" });
+  $("#setup-progress").hidden = true;
+  $("#setup-actions").hidden = false;
+  $("#setup-spinner").style.display = "none";
+  $("#connect-btn").disabled = true;
+}
+function hideSetup() {
+  setupOverlay.hidden = true;
+  $("#connect-btn").disabled = false;
+}
+function setSetupProgress(done, total) {
+  $("#setup-progress").hidden = false;
+  if (total) {
+    const pct = Math.floor((done / total) * 100);
+    $("#setup-progress-bar").style.width = `${pct}%`;
+    $("#setup-body").textContent = t("setup.downloading", {
+      percent: pct,
+      done: formatBytes(done),
+      total: formatBytes(total),
+    });
+  } else {
+    $("#setup-body").textContent = formatBytes(done);
+  }
+}
+
+$("#setup-retry-btn")?.addEventListener("click", async () => {
+  showSetup();
+  try {
+    await invoke("install_update");
+  } catch (e) {
+    showSetupError();
+  }
+});
 
 $("#restart-admin-btn")?.addEventListener("click", async () => {
   try {
@@ -813,19 +879,41 @@ function setupLanguageSwitcher(names) {
   await refreshBinaryInfo();
   await refreshElevation();
 
-  // Show cached update status immediately so the badge isn't stuck on "Checking…"
-  // while we wait for the network. Then do a fresh check in the background; if we
-  // have a cached value the refresh is silent (badge keeps showing the previous
-  // result until the new one arrives).
+  // First-launch detection: if there's no client binary anywhere, show the
+  // setup overlay until the Rust-side auto-updater finishes the initial download.
+  // Otherwise we just refresh the cached status badge silently in the background.
   let hadCached = false;
+  let needsSetup = false;
   try {
+    const info = await invoke("binary_info");
+    if (info && info.exists === false) {
+      // Double-check via cached status — maybe an install just happened on disk.
+      const cached = await invoke("cached_update_status");
+      needsSetup = !(cached && cached.installed_path);
+    }
     const cached = await invoke("cached_update_status");
     if (cached) {
       renderUpdateStatus(cached);
       hadCached = true;
     }
   } catch (_) {}
+
+  if (needsSetup) showSetup();
   refreshUpdateStatus({ silent: hadCached });
+
+  // If after 12 seconds we still haven't seen the binary, show the error
+  // overlay with a retry button. The auto-update task will still keep running
+  // and surface its eventual outcome via update://installed.
+  if (needsSetup) {
+    setTimeout(async () => {
+      try {
+        const info = await invoke("binary_info");
+        if (!info.exists && !setupOverlay.hidden) {
+          showSetupError();
+        }
+      } catch (_) {}
+    }, 12000);
+  }
 
   // Restore the last opened tab.
   try {

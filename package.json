@@ -1,0 +1,7 @@
+{
+  "name": "trusttunnel-gui",
+  "displayName": "TrustTunnel",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cross-platform desktop client for the TrustTunnel VPN protocol"
+}

@@ -249,6 +249,21 @@
       </div>
     </div>
 
+    <!-- First-launch setup overlay (shown until trusttunnel_client is downloaded) -->
+    <div class="setup-overlay" id="setup-overlay" hidden>
+      <div class="setup-card">
+        <div class="setup-spinner" id="setup-spinner"></div>
+        <h2 id="setup-title" data-i18n="setup.title">Подготовка к первому запуску</h2>
+        <p id="setup-body" data-i18n="setup.body">Скачиваем VPN-клиент с GitHub.</p>
+        <div class="setup-progress" id="setup-progress" hidden>
+          <div class="setup-progress-bar" id="setup-progress-bar"></div>
+        </div>
+        <div class="setup-actions" id="setup-actions" hidden>
+          <button class="btn primary" id="setup-retry-btn" data-i18n="setup.retry">Повторить</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Toast container -->
     <div class="toasts" id="toasts"></div>
 

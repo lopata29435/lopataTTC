@@ -781,6 +781,73 @@ textarea { resize: vertical; font-family: 'Cascadia Mono', 'Consolas', monospace
   to { opacity: 0; transform: translateX(20px); }
 }
 
+/* ===== First-launch setup overlay ===== */
+.setup-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(11, 15, 23, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+  backdrop-filter: blur(6px);
+  animation: fade 0.2s ease;
+}
+.setup-card {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 36px 40px;
+  max-width: 480px;
+  text-align: center;
+  box-shadow: var(--shadow);
+}
+.setup-spinner {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 22px;
+  border: 4px solid var(--bg-3);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 1.1s linear infinite;
+}
+.setup-overlay.error .setup-spinner {
+  border-color: var(--danger);
+  border-top-color: var(--danger);
+  animation: none;
+}
+.setup-card h2 {
+  margin: 0 0 10px;
+  font-size: 18px;
+  font-weight: 600;
+}
+.setup-card p {
+  margin: 0 0 18px;
+  color: var(--text-dim);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.setup-progress {
+  width: 100%;
+  height: 6px;
+  background: var(--bg-3);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 14px;
+}
+.setup-progress-bar {
+  height: 100%;
+  background: var(--accent);
+  width: 0%;
+  transition: width 0.2s ease;
+}
+.setup-actions {
+  margin-top: 20px;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
 /* scrollbars */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }

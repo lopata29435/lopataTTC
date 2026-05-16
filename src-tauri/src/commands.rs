@@ -3,7 +3,7 @@ use crate::profiles::Profile;
 use crate::service;
 use crate::updater;
 use crate::vpn::{LogPayload, StatePayload};
-use crate::{AppState, BUNDLED_CLIENT_VERSION};
+use crate::AppState;
 use std::path::PathBuf;
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -247,7 +247,7 @@ pub async fn check_for_update(state: State<'_, AppState>) -> Result<updater::Upd
     let release = updater::fetch_latest_release()
         .await
         .map_err(|e| e.to_string())?;
-    let status = updater::build_status(&app_data_dir, BUNDLED_CLIENT_VERSION, Some(&release));
+    let status = updater::build_status(&app_data_dir, None, Some(&release));
     // Cache for next launch.
     let _ = settings.patch(crate::settings::Settings {
         last_known_update: Some(serde_json::to_value(&status).unwrap_or_default()),
@@ -301,7 +301,7 @@ pub async fn install_update(
         app_state.vpn.set_binary_path(new_binary.clone());
     }
 
-    let status = updater::build_status(&app_data_dir, BUNDLED_CLIENT_VERSION, Some(&release));
+    let status = updater::build_status(&app_data_dir, None, Some(&release));
     Ok(status)
 }
 

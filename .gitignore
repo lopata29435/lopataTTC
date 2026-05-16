@@ -16,12 +16,14 @@ dist/
 .vscode/
 *.swp
 
-# Local downloads — CI fetches these on each build
+# Local downloads — fetch-client.sh / .ps1 puts the upstream client here for
+# offline dev. CI no longer bundles this — auto-updater downloads at first launch.
 src-tauri/resources/trusttunnel_client
 src-tauri/resources/trusttunnel_client.exe
 src-tauri/resources/wintun.dll
 src-tauri/resources/*.tar.gz
 src-tauri/resources/*.zip
+src-tauri/resources/trusttunnel_client-*/
 
 # Local app icon source (regeneratable)
 app-icon.png

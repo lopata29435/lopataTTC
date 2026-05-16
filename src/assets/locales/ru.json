@@ -149,5 +149,13 @@
   "confirm.deleteProfile": "Удалить «{name}»?",
   "warn.selectActive": "Сначала выбери активный сервер",
   "warn.selectServer": "Сначала выбери сервер",
-  "import.unrecognizedFormat": "Не распознан формат. Поддерживается tt://... либо TOML."
+  "import.unrecognizedFormat": "Не распознан формат. Поддерживается tt://... либо TOML.",
+
+  "setup.title": "Подготовка к первому запуску",
+  "setup.body": "Скачиваем VPN-клиент с GitHub. Это разовая операция — около 5–10 МБ.",
+  "setup.downloading": "Скачивание {percent}% ({done} / {total})",
+  "setup.unpacking": "Распаковка…",
+  "setup.error.title": "Не удалось скачать клиент",
+  "setup.error.body": "Проверь соединение и попробуй ещё раз. Можно использовать любой VPN-сервис в этот момент — он нужен только для разовой загрузки {size} МБ.",
+  "setup.retry": "Повторить"
 }

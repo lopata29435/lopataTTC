@@ -149,5 +149,13 @@
   "confirm.deleteProfile": "Delete \"{name}\"?",
   "warn.selectActive": "Select an active server first",
   "warn.selectServer": "Select a server first",
-  "import.unrecognizedFormat": "Unrecognized format. Supported: tt://... or TOML."
+  "import.unrecognizedFormat": "Unrecognized format. Supported: tt://... or TOML.",
+
+  "setup.title": "First-launch setup",
+  "setup.body": "Downloading the VPN client from GitHub. One-time operation — around 5–10 MB.",
+  "setup.downloading": "Downloading {percent}% ({done} / {total})",
+  "setup.unpacking": "Unpacking…",
+  "setup.error.title": "Could not download the client",
+  "setup.error.body": "Check your connection and try again. You can route this single {size} MB download through any other VPN if needed.",
+  "setup.retry": "Retry"
 }

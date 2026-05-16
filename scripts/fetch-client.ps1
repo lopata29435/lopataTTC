@@ -80,5 +80,10 @@ if ($AssetName -like '*windows*') {
     }
 }
 
+# Remove any leftover extracted subdirectories (we already lifted the files we need).
+Get-ChildItem -Path $resourcesDir -Directory -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -like 'trusttunnel_client-*' } |
+    Remove-Item -Recurse -Force
+
 Write-Host "Done. resources/:"
 Get-ChildItem $resourcesDir | Select-Object Name, Length | Format-Table

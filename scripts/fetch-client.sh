@@ -34,17 +34,21 @@ mkdir -p "$RES_DIR"
 
 if [[ -z "$TAG" ]]; then
   echo "Fetching latest release tag..."
-  # Portable JSON extraction. Uses `sed -E` extended regex which is supported
-  # by both GNU sed (Linux) and BSD sed (macOS). The greedy `.*` consumes the
-  # JSON prefix up to the (only) "tag_name" key; the capture grabs the value.
-  TAG=$(curl -sSL \
+  # `--fail-with-body` makes curl exit non-zero on HTTP 4xx/5xx (e.g. rate limits)
+  # while still printing the response body for debugging.
+  RESPONSE=$(curl -sSL --fail-with-body \
     -H "Accept: application/vnd.github+json" \
     -H "User-Agent: trusttunnel-gui-ci" \
-    https://api.github.com/repos/TrustTunnel/TrustTunnelClient/releases/latest \
-    | sed -nE 's/.*"tag_name"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' \
-    | head -n 1)
+    https://api.github.com/repos/TrustTunnel/TrustTunnelClient/releases/latest) || {
+      echo "GitHub API request failed. Response:" >&2
+      echo "$RESPONSE" >&2
+      exit 1
+    }
+  # python3 is pre-installed on every GitHub Actions runner image we care about.
+  TAG=$(printf '%s' "$RESPONSE" | python3 -c 'import sys, json; print(json.load(sys.stdin)["tag_name"])')
   if [[ -z "$TAG" ]]; then
-    echo "Could not determine latest TrustTunnel client tag" >&2
+    echo "Could not determine TrustTunnel client tag from response:" >&2
+    echo "$RESPONSE" >&2
     exit 1
   fi
   echo "Latest tag: $TAG"
@@ -96,6 +100,10 @@ if [[ "$ASSET" == *windows* ]]; then
 fi
 
 chmod +x "$RES_DIR/$BIN_NAME" 2>/dev/null || true
+
+# Remove any leftover extracted subdirectories (e.g. "trusttunnel_client-vX.Y.Z-linux-x86_64/")
+# — we already lifted the relevant files to the top of resources/ above.
+find "$RES_DIR" -mindepth 1 -maxdepth 1 -type d -name 'trusttunnel_client-*' -exec rm -rf {} +
 
 echo "Done. resources/:"
 ls -la "$RES_DIR"

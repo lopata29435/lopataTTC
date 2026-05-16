@@ -31,6 +31,9 @@ pub struct UpdateStatus {
     pub platform_supported: bool,
     pub update_available: bool,
     pub installed_path: Option<String>,
+    /// True when no client binary is installed yet — i.e. first launch.
+    /// UI should show a setup overlay and refuse Connect until installed.
+    pub needs_initial_install: bool,
 }
 
 pub fn clients_root(app_data_dir: &Path) -> PathBuf {
@@ -114,16 +117,23 @@ pub async fn fetch_latest_release() -> Result<ReleaseInfo> {
 }
 
 /// Compute current vs latest status without performing any download.
+///
+/// `bundled_version` is the optional fallback to report as `current` when the
+/// installer carries a built-in copy. In the no-bundle world we pass `None`,
+/// and a missing install yields `current = None` plus `needs_initial_install`.
 pub fn build_status(
     app_data_dir: &Path,
-    bundled_version: &str,
+    bundled_version: Option<&str>,
     latest: Option<&ReleaseInfo>,
 ) -> UpdateStatus {
     let installed = locate_installed_client(app_data_dir);
+    let needs_initial_install = installed.is_none() && bundled_version.is_none();
+
     let current = installed
         .as_ref()
         .map(|(v, _)| v.clone())
-        .or_else(|| Some(format!("v{}", bundled_version.trim_start_matches('v'))));
+        .or_else(|| bundled_version.map(|v| format!("v{}", v.trim_start_matches('v'))));
+
     let installed_path = installed.as_ref().map(|(_, p)| p.display().to_string());
 
     let asset_name = latest.and_then(|r| asset_name_for_current_platform(&r.tag_name));
@@ -139,6 +149,8 @@ pub fn build_status(
                 _ => false,
             }
         }
+        // No `current` but we have a `latest` → there's something to install.
+        (None, Some(_)) => true,
         _ => false,
     };
 
@@ -149,6 +161,7 @@ pub fn build_status(
         platform_supported,
         update_available,
         installed_path,
+        needs_initial_install,
     }
 }
 
