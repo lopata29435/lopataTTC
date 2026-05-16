@@ -29,4 +29,5 @@ app-icon.png
 # Local run logs
 run.log
 build*.log
-BUILD.MD
+BUILD.md
+ICONS.md

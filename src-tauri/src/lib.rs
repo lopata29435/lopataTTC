@@ -5,6 +5,7 @@ pub mod elevate;
 pub mod service;
 pub mod commands;
 pub mod updater;
+pub mod settings;
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -17,6 +18,7 @@ use tauri::{
 };
 
 use crate::profiles::ProfileStore;
+use crate::settings::SettingsStore;
 use crate::vpn::VpnService;
 
 /// Version of the bundled fallback binary (only meaningful on Windows x64 today).
@@ -27,6 +29,7 @@ pub struct AppState {
     pub vpn: Arc<VpnService>,
     pub app_data_dir: PathBuf,
     pub binary_path: Arc<Mutex<PathBuf>>,
+    pub settings: Arc<SettingsStore>,
 }
 
 /// Entry point invoked by main.rs (and by tauri::Builder on mobile in the future).
@@ -54,12 +57,30 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            // Resolve app data dir
-            let app_data_dir = app
-                .path()
-                .app_data_dir()
-                .unwrap_or_else(|_| std::env::temp_dir().join("TrustTunnelGUI"));
+            // Resolve app data dir. We override Tauri's default (which uses the
+            // dotted identifier and produces folder names like `org.trusttunnel.gui`)
+            // with a human-friendly `TrustTunnel` directory in the platform's
+            // standard user-config location.
+            let app_data_dir = pick_app_data_dir().unwrap_or_else(|| {
+                app.path()
+                    .app_data_dir()
+                    .unwrap_or_else(|_| std::env::temp_dir().join("TrustTunnel"))
+            });
             std::fs::create_dir_all(&app_data_dir).ok();
+
+            // One-time migration: if user previously had the dotted folder
+            // (`<roaming>/org.trusttunnel.gui`) and the new clean folder is empty,
+            // move profiles + current.toml across so they don't have to re-import.
+            if let Ok(old_dir) = app.path().app_data_dir() {
+                if old_dir != app_data_dir && old_dir.exists() {
+                    let new_empty = std::fs::read_dir(&app_data_dir)
+                        .map(|mut it| it.next().is_none())
+                        .unwrap_or(true);
+                    if new_empty {
+                        let _ = copy_dir_recursive(&old_dir, &app_data_dir);
+                    }
+                }
+            }
 
             let profiles_dir = app_data_dir.join("profiles");
             let profiles = ProfileStore::open(profiles_dir)?;
@@ -100,11 +121,13 @@ pub fn run() {
             }
 
             let app_data_dir_clone = app_data_dir.clone();
+            let settings_store = Arc::new(SettingsStore::open(&app_data_dir)?);
             let state = AppState {
                 profiles,
                 vpn,
                 app_data_dir,
                 binary_path: binary_path.clone(),
+                settings: settings_store,
             };
             app.manage(state);
 
@@ -141,7 +164,10 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::check_for_update,
+            commands::cached_update_status,
             commands::install_update,
+            commands::get_settings,
+            commands::update_settings,
             commands::list_profiles,
             commands::get_active_profile_id,
             commands::set_active_profile_id,
@@ -163,6 +189,7 @@ pub fn run() {
             commands::binary_info,
             commands::open_app_data_folder,
             commands::app_data_dir,
+            commands::platform_info,
             commands::is_elevated,
             commands::restart_as_admin,
             commands::register_deeplink_scheme,
@@ -179,6 +206,13 @@ pub fn run() {
 async fn auto_update_check(app: AppHandle, app_data_dir: PathBuf) -> anyhow::Result<()> {
     let release = updater::fetch_latest_release().await?;
     let status = updater::build_status(&app_data_dir, BUNDLED_CLIENT_VERSION, Some(&release));
+    // Cache for the frontend (which may not be ready to receive the event yet)
+    // and for the next launch.
+    let state: tauri::State<AppState> = app.state();
+    let _ = state.settings.patch(settings::Settings {
+        last_known_update: Some(serde_json::to_value(&status).unwrap_or_default()),
+        ..Default::default()
+    });
     let _ = app.emit("update://status", &status);
 
     if !status.update_available || !status.platform_supported {
@@ -198,6 +232,51 @@ async fn auto_update_check(app: AppHandle, app_data_dir: PathBuf) -> anyhow::Res
 
     let final_status = updater::build_status(&app_data_dir, BUNDLED_CLIENT_VERSION, Some(&release));
     let _ = app.emit("update://installed", &final_status);
+    Ok(())
+}
+
+/// Pick a clean, platform-native app data directory whose folder name is just
+/// `TrustTunnel` — no dotted identifier.
+///
+/// * Windows : `%APPDATA%\TrustTunnel`              (Roaming)
+/// * macOS   : `~/Library/Application Support/TrustTunnel`
+/// * Linux   : `$XDG_CONFIG_HOME/TrustTunnel` or `~/.config/TrustTunnel`
+fn pick_app_data_dir() -> Option<PathBuf> {
+    const APP_FOLDER: &str = "TrustTunnel";
+
+    #[cfg(windows)]
+    {
+        if let Ok(roaming) = std::env::var("APPDATA") {
+            return Some(PathBuf::from(roaming).join(APP_FOLDER));
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(home) = directories::BaseDirs::new() {
+            return Some(home.home_dir().join("Library/Application Support").join(APP_FOLDER));
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(base) = directories::BaseDirs::new() {
+            return Some(base.config_dir().join(APP_FOLDER));
+        }
+    }
+    None
+}
+
+fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let from = entry.path();
+        let to = dst.join(entry.file_name());
+        if from.is_dir() {
+            copy_dir_recursive(&from, &to)?;
+        } else {
+            std::fs::copy(&from, &to)?;
+        }
+    }
     Ok(())
 }
 

@@ -15,22 +15,22 @@
         </div>
         <nav class="nav">
           <button class="nav-item active" data-tab="home">
-            <span class="icon icon-connect"></span><span>Подключение</span>
+            <span class="icon icon-connect"></span><span data-i18n="nav.connect">Подключение</span>
           </button>
           <button class="nav-item" data-tab="profiles">
-            <span class="icon icon-servers"></span><span>Серверы</span>
+            <span class="icon icon-servers"></span><span data-i18n="nav.servers">Серверы</span>
           </button>
           <button class="nav-item" data-tab="settings">
-            <span class="icon icon-settings"></span><span>Настройки</span>
+            <span class="icon icon-settings"></span><span data-i18n="nav.settings">Настройки</span>
           </button>
           <button class="nav-item" data-tab="logs">
-            <span class="icon icon-logs"></span><span>Логи</span>
+            <span class="icon icon-logs"></span><span data-i18n="nav.logs">Логи</span>
           </button>
         </nav>
         <div class="elevation-warning" id="elevation-warning" hidden>
-          <strong>Нужны права администратора</strong>
-          <p>VPN-клиенту требуется admin для создания TUN-интерфейса и правил фаервола.</p>
-          <button class="btn primary full-width" id="restart-admin-btn">Перезапустить от админа</button>
+          <strong data-i18n="elevation.title">Нужны права администратора</strong>
+          <p data-i18n="elevation.body">VPN-клиенту требуется admin для создания TUN-интерфейса и правил фаервола.</p>
+          <button class="btn primary full-width" id="restart-admin-btn" data-i18n="elevation.btn">Перезапустить от админа</button>
         </div>
       </aside>
 
@@ -41,17 +41,17 @@
             <button class="connect-btn" id="connect-btn" data-state="disconnected">
               <span class="connect-btn-glow"></span>
               <span class="connect-btn-ring"></span>
-              <span class="connect-btn-label" id="connect-btn-label">Подключиться</span>
+              <span class="connect-btn-label" id="connect-btn-label" data-i18n="connect.btn.connect">Подключиться</span>
             </button>
 
-            <div class="status-line" id="status-line">Готово к подключению</div>
+            <div class="status-line" id="status-line" data-i18n="connect.status.ready">Готово к подключению</div>
             <div class="status-timer" id="status-timer"></div>
 
             <div class="profile-picker">
-              <label class="picker-label">Активный сервер</label>
+              <label class="picker-label" data-i18n="connect.activeProfile">Активный сервер</label>
               <div class="custom-select" id="active-profile-select" tabindex="0">
                 <button type="button" class="custom-select-trigger" id="active-profile-trigger">
-                  <span class="custom-select-value" id="active-profile-value">— нет серверов —</span>
+                  <span class="custom-select-value" id="active-profile-value" data-i18n="connect.noServers">— нет серверов —</span>
                   <span class="icon icon-chevron custom-select-chevron"></span>
                 </button>
                 <div class="custom-select-menu" id="active-profile-menu" hidden></div>
@@ -59,18 +59,18 @@
             </div>
           </div>
           <div class="home-actions">
-            <button class="btn ghost" id="paste-deeplink-btn"><span class="icon icon-clipboard"></span>Импортировать из буфера</button>
-            <button class="btn ghost" id="import-file-btn"><span class="icon icon-file"></span>Импорт .toml</button>
+            <button class="btn ghost" id="paste-deeplink-btn"><span class="icon icon-clipboard"></span><span data-i18n="connect.importClipboard">Импортировать из буфера</span></button>
+            <button class="btn ghost" id="import-file-btn"><span class="icon icon-file"></span><span data-i18n="connect.importFile">Импорт .toml</span></button>
           </div>
         </section>
 
         <!-- PROFILES TAB -->
         <section class="tab" data-tab="profiles">
           <div class="tab-header">
-            <h2>Серверы</h2>
+            <h2 data-i18n="profiles.title">Серверы</h2>
             <div class="header-actions">
-              <button class="btn primary" id="new-profile-btn">+ Новый сервер</button>
-              <button class="btn ghost" id="profiles-import-btn">📋 Импорт tt://</button>
+              <button class="btn primary" id="new-profile-btn" data-i18n="profiles.newPlus">+ Новый сервер</button>
+              <button class="btn ghost" id="profiles-import-btn"><span class="icon icon-clipboard"></span><span data-i18n="profiles.import">Импорт tt://</span></button>
             </div>
           </div>
           <div class="profile-list" id="profile-list"></div>
@@ -79,55 +79,71 @@
         <!-- SETTINGS TAB -->
         <section class="tab" data-tab="settings">
           <div class="tab-header">
-            <h2>Настройки</h2>
+            <h2 data-i18n="settings.title">Настройки</h2>
           </div>
           <div class="settings-list">
             <div class="setting-card">
               <div class="setting-head">
-                <h3>Автозапуск (Windows-служба)</h3>
-                <p>VPN будет подниматься при загрузке системы, до входа пользователя.</p>
+                <h3 data-i18n="settings.language.title">Язык</h3>
+                <p data-i18n="settings.language.body">Язык интерфейса.</p>
               </div>
               <div class="setting-controls">
-                <span class="badge" id="service-badge">Не установлена</span>
-                <button class="btn" id="service-install-btn">Установить</button>
-                <button class="btn ghost" id="service-uninstall-btn">Удалить</button>
+                <div class="custom-select" id="language-select" tabindex="0">
+                  <button type="button" class="custom-select-trigger" id="language-trigger">
+                    <span class="custom-select-value" id="language-value">…</span>
+                    <span class="icon icon-chevron custom-select-chevron"></span>
+                  </button>
+                  <div class="custom-select-menu" id="language-menu" hidden></div>
+                </div>
               </div>
             </div>
 
             <div class="setting-card">
               <div class="setting-head">
-                <h3>Deeplink <code>tt://</code></h3>
-                <p>Регистрация схемы в реестре Windows. После регистрации клик по <code>tt://</code>-ссылке в браузере откроет TrustTunnel и попросит импортировать профиль.</p>
+                <h3 data-i18n="settings.autostart.title">Автозапуск</h3>
+                <p id="autostart-desc" data-i18n="settings.autostart.body">Поднимать VPN сразу при включении компьютера.</p>
               </div>
               <div class="setting-controls">
-                <span class="badge" id="deeplink-badge">Статус неизвестен</span>
-                <button class="btn" id="deeplink-register-btn">Зарегистрировать tt://</button>
-                <button class="btn ghost" id="deeplink-test-btn">Тест: показать буфер</button>
+                <span class="badge" id="service-badge" data-i18n="settings.autostart.statusDisabled">Выключено</span>
+                <button class="btn" id="service-install-btn" data-i18n="settings.autostart.enable">Включить</button>
+                <button class="btn ghost" id="service-uninstall-btn" data-i18n="settings.autostart.disable">Выключить</button>
               </div>
             </div>
 
             <div class="setting-card">
               <div class="setting-head">
-                <h3>Обновление клиента</h3>
-                <p>Установленная версия: <code id="update-current">…</code></p>
-                <p>Последняя на GitHub: <code id="update-latest">…</code></p>
-                <p id="update-progress-line" hidden>Скачивание: <span id="update-progress-text">0%</span></p>
+                <h3 data-i18n="settings.deeplink.title">Открывать ссылки tt://</h3>
+                <p data-i18n="settings.deeplink.body">Клик по tt://-ссылке в браузере добавит профиль в это приложение.</p>
               </div>
               <div class="setting-controls">
-                <span class="badge" id="update-badge">Проверка…</span>
-                <button class="btn primary" id="check-update-btn">Проверить</button>
-                <button class="btn" id="install-update-btn" hidden>Установить обновление</button>
+                <span class="badge" id="deeplink-badge" data-i18n="settings.deeplink.statusUnknown">Статус неизвестен</span>
+                <button class="btn" id="deeplink-register-btn" data-i18n="settings.deeplink.register">Включить</button>
+                <button class="btn ghost" id="deeplink-test-btn" data-i18n="settings.deeplink.test">Тест: показать буфер</button>
               </div>
             </div>
 
             <div class="setting-card">
               <div class="setting-head">
-                <h3>Пути</h3>
-                <p>Бинарник: <code id="binary-path-info">…</code></p>
-                <p>Папка данных: <code id="data-path-info">…</code></p>
+                <h3 data-i18n="settings.update.title">Обновление клиента</h3>
+                <p><span data-i18n="settings.update.current">Установленная версия:</span> <code id="update-current">…</code></p>
+                <p><span data-i18n="settings.update.latest">Последняя на GitHub:</span> <code id="update-latest">…</code></p>
+                <p id="update-progress-line" hidden><span data-i18n="settings.update.downloading">Скачивание:</span> <span id="update-progress-text">0%</span></p>
               </div>
               <div class="setting-controls">
-                <button class="btn ghost" id="copy-data-path-btn">Копировать путь</button>
+                <span class="badge" id="update-badge" data-i18n="settings.update.checking">Проверка…</span>
+                <button class="btn primary" id="check-update-btn" data-i18n="settings.update.check">Проверить</button>
+                <button class="btn" id="install-update-btn" hidden data-i18n="settings.update.install">Установить обновление</button>
+              </div>
+            </div>
+
+            <div class="setting-card">
+              <div class="setting-head">
+                <h3 data-i18n="settings.paths.title">Пути</h3>
+                <p><span data-i18n="settings.paths.binary">Бинарник:</span> <code id="binary-path-info">…</code></p>
+                <p><span data-i18n="settings.paths.dataDir">Папка данных:</span> <code id="data-path-info">…</code></p>
+              </div>
+              <div class="setting-controls">
+                <button class="btn ghost" id="copy-data-path-btn" data-i18n="settings.paths.copy">Копировать путь</button>
               </div>
             </div>
           </div>
@@ -136,9 +152,9 @@
         <!-- LOGS TAB -->
         <section class="tab" data-tab="logs">
           <div class="tab-header">
-            <h2>Логи клиента</h2>
+            <h2 data-i18n="logs.title">Логи клиента</h2>
             <div class="header-actions">
-              <button class="btn ghost" id="logs-clear-btn">Очистить</button>
+              <button class="btn ghost" id="logs-clear-btn" data-i18n="logs.clear">Очистить</button>
             </div>
           </div>
           <pre class="log-view" id="log-view"></pre>
@@ -150,85 +166,85 @@
     <div class="modal-backdrop" id="profile-modal" hidden>
       <div class="modal">
         <header class="modal-header">
-          <h3 id="profile-modal-title">Профиль сервера</h3>
+          <h3 id="profile-modal-title" data-i18n="modal.profile.title">Профиль сервера</h3>
           <button class="modal-close" id="profile-modal-close">×</button>
         </header>
         <div class="modal-tabs">
-          <button class="modal-tab active" data-modal-tab="form">Форма</button>
-          <button class="modal-tab" data-modal-tab="toml">TOML</button>
+          <button class="modal-tab active" data-modal-tab="form" data-i18n="modal.profile.tab.form">Форма</button>
+          <button class="modal-tab" data-modal-tab="toml" data-i18n="modal.profile.tab.toml">TOML</button>
         </div>
         <div class="modal-body">
           <div class="modal-section active" data-modal-section="form">
             <div class="form-grid">
-              <label>Название
-                <input id="f-name" type="text" placeholder="Germany VPN" />
+              <label><span data-i18n="form.name">Название</span>
+                <input id="f-name" type="text" data-i18n-placeholder="form.namePlaceholder" placeholder="Germany VPN" />
               </label>
-              <label>Hostname
-                <input id="f-hostname" type="text" placeholder="vpn.example.com" />
+              <label><span data-i18n="form.hostname">Hostname</span>
+                <input id="f-hostname" type="text" data-i18n-placeholder="form.hostnamePlaceholder" placeholder="vpn.example.com" />
               </label>
-              <label>Адрес (host:port)
-                <input id="f-address" type="text" placeholder="vpn.example.com:443" />
+              <label><span data-i18n="form.address">Адрес (host:port)</span>
+                <input id="f-address" type="text" data-i18n-placeholder="form.addressPlaceholder" placeholder="vpn.example.com:443" />
               </label>
-              <label>Пользователь
+              <label><span data-i18n="form.username">Пользователь</span>
                 <input id="f-username" type="text" />
               </label>
-              <label>Пароль
+              <label><span data-i18n="form.password">Пароль</span>
                 <div class="input-with-button">
                   <input id="f-password" type="password" />
-                  <button type="button" class="input-icon-btn" id="f-password-toggle" title="Показать/скрыть" aria-label="Показать пароль">
+                  <button type="button" class="input-icon-btn" id="f-password-toggle" data-i18n-aria-label="form.showPasswordTitle" aria-label="Показать пароль">
                     <span class="icon icon-eye-open" id="f-password-icon"></span>
                   </button>
                 </div>
               </label>
-              <label>SNI (опционально)
+              <label><span data-i18n="form.sni">SNI (опционально)</span>
                 <input id="f-sni" type="text" />
               </label>
-              <label>Протокол
+              <label><span data-i18n="form.protocol">Протокол</span>
                 <select id="f-protocol">
-                  <option value="http2">HTTP/2 (TCP)</option>
-                  <option value="http3">HTTP/3 (QUIC/UDP)</option>
+                  <option value="http2" data-i18n="protocol.http2">HTTP/2 (TCP)</option>
+                  <option value="http3" data-i18n="protocol.http3">HTTP/3 (QUIC/UDP)</option>
                 </select>
               </label>
-              <label>VPN-режим
+              <label><span data-i18n="form.vpnMode">VPN-режим</span>
                 <select id="f-vpn-mode">
-                  <option value="general">general — всё через VPN</option>
-                  <option value="selective">selective — только списки</option>
+                  <option value="general" data-i18n="vpnMode.general">general — всё через VPN</option>
+                  <option value="selective" data-i18n="vpnMode.selective">selective — только списки</option>
                 </select>
               </label>
               <label class="check">
                 <input id="f-anti-dpi" type="checkbox" />
-                <span>Anti-DPI</span>
+                <span data-i18n="form.antiDpi">Anti-DPI</span>
               </label>
               <label class="check">
                 <input id="f-killswitch" type="checkbox" />
-                <span>Kill-switch</span>
+                <span data-i18n="form.killswitch">Kill-switch</span>
               </label>
               <label class="check">
                 <input id="f-pq" type="checkbox" />
-                <span>Post-Quantum TLS</span>
+                <span data-i18n="form.pq">Post-Quantum TLS</span>
               </label>
               <label class="check">
                 <input id="f-skip-verify" type="checkbox" />
-                <span>Не проверять сертификат</span>
+                <span data-i18n="form.skipVerify">Не проверять сертификат</span>
               </label>
             </div>
-            <label class="full">DNS upstreams (по одной на строку)
+            <label class="full"><span data-i18n="form.dns">DNS upstreams (по одной на строку)</span>
               <textarea id="f-dns" rows="3"></textarea>
             </label>
             <label class="full">
-              <span id="f-exclusions-label">Исключения (по одной на строку)</span>
-              <span id="f-exclusions-hint" class="field-hint">сайты, которые НЕ пойдут через VPN</span>
+              <span id="f-exclusions-label" data-i18n="form.exclusions.general">Исключения (по одной на строку)</span>
+              <span id="f-exclusions-hint" class="field-hint" data-i18n="form.exclusions.general.hint">эти адреса пойдут напрямую в обход VPN</span>
               <textarea id="f-exclusions" rows="3" placeholder="*.ru&#10;ya.ru"></textarea>
             </label>
           </div>
           <div class="modal-section" data-modal-section="toml">
-            <p class="toml-help">Прямое редактирование TOML. При сохранении переопределяет все поля формы.</p>
+            <p class="toml-help" data-i18n="form.toml.help">Прямое редактирование TOML. При сохранении переопределяет все поля формы.</p>
             <textarea id="f-raw-toml" class="toml-editor" spellcheck="false"></textarea>
           </div>
         </div>
         <footer class="modal-footer">
-          <button class="btn ghost" id="profile-modal-cancel">Отмена</button>
-          <button class="btn primary" id="profile-modal-save">Сохранить</button>
+          <button class="btn ghost" id="profile-modal-cancel" data-i18n="modal.profile.cancel">Отмена</button>
+          <button class="btn primary" id="profile-modal-save" data-i18n="modal.profile.save">Сохранить</button>
         </footer>
       </div>
     </div>

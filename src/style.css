@@ -130,6 +130,49 @@ button {
   color: var(--accent);
 }
 
+/* === Icon system ===
+   Every icon lives in src/assets/icons/<name>.svg and is rendered as a CSS mask
+   so it picks up `color` from the surrounding context (sidebar greys, accent on
+   hover, etc.). To add a new icon: drop the .svg in that folder and add a
+   `.icon-<name>` rule below. */
+.icon {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  background-color: currentColor;
+  -webkit-mask-image: var(--icon-url);
+          mask-image: var(--icon-url);
+  -webkit-mask-size: contain;
+          mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+          mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+          mask-position: center;
+}
+.nav-item .icon { color: var(--accent); }
+
+.icon-connect    { --icon-url: url('./assets/icons/connect.svg'); }
+.icon-servers    { --icon-url: url('./assets/icons/servers.svg'); }
+.icon-settings   { --icon-url: url('./assets/icons/settings.svg'); }
+.icon-logs       { --icon-url: url('./assets/icons/logs.svg'); }
+.icon-clipboard  { --icon-url: url('./assets/icons/clipboard.svg'); }
+.icon-file       { --icon-url: url('./assets/icons/file.svg'); }
+.icon-eye-open   { --icon-url: url('./assets/icons/eye-open.svg'); }
+.icon-eye-closed { --icon-url: url('./assets/icons/eye-closed.svg'); }
+.icon-chevron    { --icon-url: url('./assets/icons/chevron-down.svg'); width: 12px; height: 8px; }
+.icon-check      { --icon-url: url('./assets/icons/check.svg'); }
+.icon-alert      { --icon-url: url('./assets/icons/alert.svg'); width: 14px; height: 14px; }
+
+.missing-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--danger);
+  font-size: 12px;
+}
+.missing-tag .icon { color: var(--danger); }
+
 .elevation-warning {
   background: var(--warn-soft);
   border: 1px solid rgba(245, 158, 11, 0.4);
@@ -398,8 +441,19 @@ select option {
   color: var(--text);
 }
 .custom-select-option.selected::after {
-  content: "✓";
-  color: var(--accent);
+  content: "";
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  background-color: var(--accent);
+  -webkit-mask-image: url('./assets/icons/check.svg');
+          mask-image: url('./assets/icons/check.svg');
+  -webkit-mask-size: contain;
+          mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+          mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+          mask-position: center;
 }
 .custom-select-empty {
   padding: 10px;

@@ -188,6 +188,18 @@ pub fn app_data_dir(state: State<AppState>) -> String {
 }
 
 #[tauri::command]
+pub fn platform_info() -> serde_json::Value {
+    serde_json::json!({
+        "os": std::env::consts::OS,
+        "arch": std::env::consts::ARCH,
+        "is_windows": cfg!(windows),
+        "is_macos": cfg!(target_os = "macos"),
+        "is_linux": cfg!(target_os = "linux"),
+        "autostart_supported": cfg!(windows),
+    })
+}
+
+#[tauri::command]
 pub fn restart_as_admin(app: AppHandle) -> Result<(), String> {
     use crate::elevate;
     if elevate::is_elevated() {
@@ -226,8 +238,33 @@ pub fn quit_app(app: AppHandle) {
 #[tauri::command]
 pub async fn check_for_update(state: State<'_, AppState>) -> Result<updater::UpdateStatus, String> {
     let app_data_dir = state.app_data_dir.clone();
+    let settings = state.settings.clone();
     let release = updater::fetch_latest_release().await.map_err(|e| e.to_string())?;
-    Ok(updater::build_status(&app_data_dir, BUNDLED_CLIENT_VERSION, Some(&release)))
+    let status = updater::build_status(&app_data_dir, BUNDLED_CLIENT_VERSION, Some(&release));
+    // Cache for next launch.
+    let _ = settings.patch(crate::settings::Settings {
+        last_known_update: Some(serde_json::to_value(&status).unwrap_or_default()),
+        ..Default::default()
+    });
+    Ok(status)
+}
+
+#[tauri::command]
+pub fn cached_update_status(state: State<AppState>) -> Option<serde_json::Value> {
+    state.settings.get().last_known_update
+}
+
+#[tauri::command]
+pub fn get_settings(state: State<AppState>) -> crate::settings::Settings {
+    state.settings.get()
+}
+
+#[tauri::command]
+pub fn update_settings(
+    state: State<AppState>,
+    patch: crate::settings::Settings,
+) -> Result<crate::settings::Settings, String> {
+    state.settings.patch(patch).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

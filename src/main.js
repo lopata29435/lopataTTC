@@ -1,4 +1,6 @@
 // TrustTunnel GUI — frontend logic
+import { init as initI18n, t, listLocales, currentLocale, setLocale, applyToDom, onChange as onLocaleChange } from "./i18n.js";
+
 const TAURI = window.__TAURI__ || {};
 const invoke = TAURI.core?.invoke || ((cmd) => Promise.reject(new Error(`Tauri not ready: ${cmd}`)));
 const listen = TAURI.event?.listen || (async () => () => {});
@@ -42,18 +44,18 @@ function toast(message, kind = "info", opts = {}) {
     actions.className = "toast-actions";
     const copyBtn = document.createElement("button");
     copyBtn.className = "toast-btn";
-    copyBtn.textContent = "Копировать";
+    copyBtn.textContent = t("toast.copy");
     copyBtn.onclick = async (ev) => {
       ev.stopPropagation();
       try {
         await navigator.clipboard.writeText(String(message));
-        copyBtn.textContent = "Скопировано ✓";
-        setTimeout(() => (copyBtn.textContent = "Копировать"), 1400);
+        copyBtn.textContent = t("toast.copied");
+        setTimeout(() => (copyBtn.textContent = t("toast.copy")), 1400);
       } catch { /* ignore */ }
     };
     const closeBtn = document.createElement("button");
     closeBtn.className = "toast-btn";
-    closeBtn.textContent = "Закрыть";
+    closeBtn.textContent = t("toast.close");
     closeBtn.onclick = () => el.remove();
     actions.appendChild(copyBtn);
     actions.appendChild(closeBtn);
@@ -84,6 +86,8 @@ function formatDuration(seconds) {
 function setTab(name) {
   $$(".nav-item").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
   $$(".tab").forEach(s => s.classList.toggle("active", s.dataset.tab === name));
+  // Persist last opened tab for next launch (fire-and-forget).
+  invoke("update_settings", { patch: { last_tab: name } }).catch(() => {});
 }
 $$(".nav-item").forEach(b => b.addEventListener("click", () => setTab(b.dataset.tab)));
 
@@ -99,9 +103,10 @@ function renderProfileList() {
   const root = $("#profile-list");
   root.innerHTML = "";
   if (state.profiles.length === 0) {
-    root.innerHTML = `<div style="color: var(--text-dim); grid-column: 1/-1; text-align: center; padding: 40px;">
-      Серверов пока нет. Добавь новый или импортируй <code>tt://</code>-ссылку.
-    </div>`;
+    const empty = document.createElement("div");
+    empty.style.cssText = "color: var(--text-dim); grid-column: 1/-1; text-align: center; padding: 40px;";
+    empty.textContent = t("profiles.empty");
+    root.appendChild(empty);
     return;
   }
   for (const p of state.profiles) {
@@ -118,25 +123,31 @@ function renderProfileList() {
         <span class="badge">${p.vpn_mode}</span>
       </div>
       <div class="profile-card-actions">
-        <button class="btn primary" data-action="activate">Сделать активным</button>
-        <button class="btn" data-action="edit">Изменить</button>
-        <button class="btn danger" data-action="delete">Удалить</button>
+        <button class="btn primary" data-action="activate"></button>
+        <button class="btn" data-action="edit"></button>
+        <button class="btn danger" data-action="delete"></button>
       </div>
     `;
     card.querySelector(".profile-card-name").textContent = p.name;
     card.querySelector(".profile-card-host").textContent = addr;
-    card.querySelector('[data-action="activate"]').onclick = async () => {
+    const actBtn = card.querySelector('[data-action="activate"]');
+    const editBtn = card.querySelector('[data-action="edit"]');
+    const delBtn = card.querySelector('[data-action="delete"]');
+    actBtn.textContent = t("profiles.card.activate");
+    editBtn.textContent = t("profiles.card.edit");
+    delBtn.textContent = t("profiles.card.delete");
+    actBtn.onclick = async () => {
       await invoke("set_active_profile_id", { id: p.id });
       state.activeId = p.id;
       renderProfileList();
       renderActivePicker();
-      toast(`Активный сервер: ${p.name}`, "success");
+      toast(t("toast.activeChanged", { name: p.name }), "success");
     };
-    card.querySelector('[data-action="edit"]').onclick = () => openProfileModal(p);
-    card.querySelector('[data-action="delete"]').onclick = async () => {
-      if (!confirm(`Удалить «${p.name}»?`)) return;
+    editBtn.onclick = () => openProfileModal(p);
+    delBtn.onclick = async () => {
+      if (!confirm(t("confirm.deleteProfile", { name: p.name }))) return;
       await invoke("delete_profile", { id: p.id });
-      toast(`«${p.name}» удалён`, "success");
+      toast(t("toast.profileDeleted", { name: p.name }), "success");
       await refreshProfiles();
     };
     root.appendChild(card);
@@ -150,10 +161,10 @@ function renderActivePicker() {
 
   menu.innerHTML = "";
   if (state.profiles.length === 0) {
-    value.textContent = "— нет серверов —";
+    value.textContent = t("connect.noServers");
     const empty = document.createElement("div");
     empty.className = "custom-select-empty";
-    empty.textContent = "Добавь сервер на вкладке «Серверы»";
+    empty.textContent = t("connect.noServersHint");
     menu.appendChild(empty);
     wrap.classList.add("disabled");
     return;
@@ -208,12 +219,12 @@ $("#connect-btn").addEventListener("click", async () => {
   if (s === "connected" || s === "connecting") {
     try {
       await invoke("vpn_disconnect");
-    } catch (e) { toast(`Ошибка отключения: ${e}`, "error"); }
+    } catch (e) { toast(t("toast.disconnectErr", { err: describeError(e) }), "error"); }
   } else {
-    if (!state.activeId) { toast("Сначала выбери сервер", "warn"); return; }
+    if (!state.activeId) { toast(t("warn.selectServer"), "warn"); return; }
     try {
       await invoke("vpn_connect", { profileId: state.activeId });
-    } catch (e) { toast(`Ошибка подключения: ${e}`, "error"); }
+    } catch (e) { toast(t("toast.connectErr", { err: describeError(e) }), "error"); }
   }
 });
 
@@ -224,22 +235,24 @@ function renderVpnState(s) {
   btn.dataset.state = s.state;
   switch (s.state) {
     case "disconnected":
-      label.textContent = "Подключиться";
-      status.textContent = s.message || "Готово к подключению";
+      label.textContent = t("connect.btn.connect");
+      status.textContent = s.message || t("connect.status.ready");
       $("#status-timer").textContent = "";
       break;
     case "connecting":
-      label.textContent = "Подключение...";
-      status.textContent = s.message || "Подключение...";
+      label.textContent = t("connect.btn.connecting");
+      status.textContent = s.message || t("connect.status.connecting");
       $("#status-timer").textContent = "";
       break;
     case "connected":
-      label.textContent = "Отключиться";
-      status.textContent = `Подключено${s.profile_name ? " · " + s.profile_name : ""}`;
+      label.textContent = t("connect.btn.disconnect");
+      status.textContent = s.profile_name
+        ? t("connect.status.connectedNamed", { name: s.profile_name })
+        : t("connect.status.connected");
       break;
     case "error":
-      label.textContent = "Повторить";
-      status.textContent = s.message || "Ошибка";
+      label.textContent = t("connect.btn.retry");
+      status.textContent = s.message || t("connect.status.error");
       $("#status-timer").textContent = "";
       break;
   }
@@ -284,20 +297,20 @@ async function tryImportText(text) {
   if (trimmed.includes("hostname") || trimmed.includes("[endpoint]")) {
     return await invoke("import_toml_text", { text: trimmed, fallbackName: "Imported" });
   }
-  throw new Error("Не распознан формат. Поддерживается tt://... либо TOML.");
+  throw new Error(t("import.unrecognizedFormat"));
 }
 
 async function importFromClipboard() {
   try {
     const text = await readText();
-    if (!text) { toast("Буфер пуст", "warn"); return; }
+    if (!text) { toast(t("toast.clipboardEmpty"), "warn"); return; }
     const profile = await tryImportText(text);
     if (profile) {
-      toast(`Импортирован: ${profile.name}`, "success");
+      toast(t("toast.profileImported", { name: profile.name }), "success");
       await refreshProfiles();
     }
   } catch (e) {
-    toast(`Ошибка импорта: ${describeError(e)}`, "error");
+    toast(t("toast.importErr", { err: describeError(e) }), "error");
   }
 }
 
@@ -308,10 +321,10 @@ async function importFromFile() {
     const path = typeof result === "string" ? result : (result.path || result[0]);
     if (!path) return;
     const profile = await invoke("import_toml_file", { path });
-    toast(`Импортирован: ${profile.name}`, "success");
+    toast(t("toast.profileImported", { name: profile.name }), "success");
     await refreshProfiles();
   } catch (e) {
-    toast(`Ошибка импорта: ${describeError(e)}`, "error");
+    toast(t("toast.importErr", { err: describeError(e) }), "error");
   }
 }
 
@@ -327,16 +340,18 @@ $("#copy-data-path-btn")?.addEventListener("click", async () => {
   const path = $("#data-path-info").textContent;
   try {
     await navigator.clipboard.writeText(path);
-    toast("Путь скопирован в буфер", "success");
+    toast(t("toast.pathCopied"), "success");
   } catch (e) {
-    toast(`Не удалось скопировать: ${describeError(e)}`, "error");
+    toast(t("toast.copyFailed", { err: describeError(e) }), "error");
   }
 });
 
 // ===== profile modal =====
 function openProfileModal(profile) {
   state.editingProfile = JSON.parse(JSON.stringify(profile));
-  $("#profile-modal-title").textContent = state.editingProfile.name ? `Профиль · ${state.editingProfile.name}` : "Новый профиль";
+  $("#profile-modal-title").textContent = state.editingProfile.name
+    ? t("modal.profile.titleNamed", { name: state.editingProfile.name })
+    : t("modal.profile.titleNew");
   $("#f-name").value = profile.name || "";
   $("#f-hostname").value = profile.hostname || "";
   $("#f-address").value = (profile.addresses || [])[0] || "";
@@ -358,10 +373,10 @@ function openProfileModal(profile) {
   const pw = $("#f-password");
   if (pw) {
     pw.type = "password";
-    const btn = $("#f-password-toggle");
-    if (btn) {
-      btn.querySelector(".eye-open").style.display = "block";
-      btn.querySelector(".eye-closed").style.display = "none";
+    const icon = $("#f-password-icon");
+    if (icon) {
+      icon.classList.add("icon-eye-open");
+      icon.classList.remove("icon-eye-closed");
     }
   }
   $("#profile-modal").hidden = false;
@@ -373,17 +388,17 @@ function closeProfileModal() {
 }
 
 function setModalTab(name) {
-  $$(".modal-tab").forEach(t => t.classList.toggle("active", t.dataset.modalTab === name));
+  $$(".modal-tab").forEach(tab => tab.classList.toggle("active", tab.dataset.modalTab === name));
   $$(".modal-section").forEach(s => s.classList.toggle("active", s.dataset.modalSection === name));
   // When switching to TOML view, render current form-state TOML if user hasn't typed anything custom yet
   if (name === "toml" && !$("#f-raw-toml").value.trim()) {
-    invoke("profile_to_toml", { profile: collectFormProfile() }).then(t => {
-      $("#f-raw-toml").value = t;
+    invoke("profile_to_toml", { profile: collectFormProfile() }).then(toml => {
+      $("#f-raw-toml").value = toml;
     });
   }
 }
 
-$$(".modal-tab").forEach(t => t.addEventListener("click", () => setModalTab(t.dataset.modalTab)));
+$$(".modal-tab").forEach(tab => tab.addEventListener("click", () => setModalTab(tab.dataset.modalTab)));
 $("#profile-modal-close").addEventListener("click", closeProfileModal);
 $("#profile-modal-cancel").addEventListener("click", closeProfileModal);
 // Suppress label-click → focus-next behaviour: when the button lives inside a
@@ -397,22 +412,23 @@ $("#f-password-toggle")?.addEventListener("click", (e) => {
   e.stopPropagation();
   const input = $("#f-password");
   const btn = $("#f-password-toggle");
+  const icon = $("#f-password-icon");
   const show = input.type === "password";
   input.type = show ? "text" : "password";
-  btn.querySelector(".eye-open").style.display = show ? "none" : "block";
-  btn.querySelector(".eye-closed").style.display = show ? "block" : "none";
-  btn.setAttribute("aria-label", show ? "Скрыть пароль" : "Показать пароль");
+  icon.classList.toggle("icon-eye-open", !show);
+  icon.classList.toggle("icon-eye-closed", show);
+  btn.setAttribute("aria-label", t(show ? "form.hidePasswordTitle" : "form.showPasswordTitle"));
 });
 
 function updateExclusionsLabel() {
   const mode = $("#f-vpn-mode").value;
   if (mode === "selective") {
-    $("#f-exclusions-label").textContent = "Сайты через VPN (по одному на строку)";
-    $("#f-exclusions-hint").textContent = "только эти адреса пойдут через VPN, остальное — напрямую";
+    $("#f-exclusions-label").textContent = t("form.exclusions.selective");
+    $("#f-exclusions-hint").textContent = t("form.exclusions.selective.hint");
     $("#f-exclusions").placeholder = "youtube.com\n*.netflix.com";
   } else {
-    $("#f-exclusions-label").textContent = "Исключения (по одному на строку)";
-    $("#f-exclusions-hint").textContent = "эти адреса пойдут напрямую в обход VPN";
+    $("#f-exclusions-label").textContent = t("form.exclusions.general");
+    $("#f-exclusions-hint").textContent = t("form.exclusions.general.hint");
     $("#f-exclusions").placeholder = "*.ru\nya.ru";
   }
 }
@@ -420,7 +436,7 @@ $("#f-vpn-mode")?.addEventListener("change", updateExclusionsLabel);
 
 function collectFormProfile() {
   const p = state.editingProfile;
-  p.name = $("#f-name").value.trim() || "Новый сервер";
+  p.name = $("#f-name").value.trim() || t("profiles.new");
   p.hostname = $("#f-hostname").value.trim();
   const addr = $("#f-address").value.trim();
   p.addresses = addr ? [addr] : [];
@@ -444,28 +460,41 @@ $("#profile-modal-save").addEventListener("click", async () => {
     const rawToml = $("#f-raw-toml").value.trim();
     profile.raw_toml = rawToml ? rawToml : null;
     const saved = await invoke("save_profile", { profile });
-    toast(`«${saved.name}» сохранён`, "success");
+    toast(t("toast.profileSaved", { name: saved.name }), "success");
     closeProfileModal();
     await refreshProfiles();
   } catch (e) {
-    toast(`Ошибка сохранения: ${e}`, "error");
+    toast(t("toast.saveErr", { err: describeError(e) }), "error");
   }
 });
 
 // ===== service =====
 async function refreshServiceStatus() {
   try {
-    const s = await invoke("service_status");
+    const platform = await invoke("platform_info");
     const badge = $("#service-badge");
+    const installBtn = $("#service-install-btn");
+    const uninstallBtn = $("#service-uninstall-btn");
+
+    if (!platform.autostart_supported) {
+      badge.className = "badge";
+      badge.textContent = t("settings.autostart.statusUnsupported");
+      installBtn.disabled = true;
+      uninstallBtn.disabled = true;
+      $("#autostart-desc").textContent = t("settings.autostart.bodyUnsupported");
+      return;
+    }
+
+    const s = await invoke("service_status");
     if (s.installed && s.running) {
       badge.className = "badge ok";
-      badge.textContent = "Установлена · работает";
+      badge.textContent = t("settings.autostart.statusEnabled");
     } else if (s.installed) {
       badge.className = "badge warn";
-      badge.textContent = "Установлена · остановлена";
+      badge.textContent = t("settings.autostart.statusEnabledNotRunning");
     } else {
       badge.className = "badge";
-      badge.textContent = "Не установлена";
+      badge.textContent = t("settings.autostart.statusDisabled");
     }
   } catch (e) {
     console.warn(e);
@@ -473,29 +502,40 @@ async function refreshServiceStatus() {
 }
 
 $("#service-install-btn").addEventListener("click", async () => {
-  if (!state.activeId) { toast("Сначала выбери активный сервер", "warn"); return; }
+  if (!state.activeId) { toast(t("warn.selectActive"), "warn"); return; }
   try {
     await invoke("service_install", { profileId: state.activeId });
-    toast("Служба установлена (UAC подтверждён)", "success");
+    toast(t("toast.serviceInstalled"), "success");
     setTimeout(refreshServiceStatus, 1500);
   } catch (e) {
-    toast(`Ошибка: ${describeError(e)}`, "error");
+    toast(t("toast.error", { err: describeError(e) }), "error");
   }
 });
 $("#service-uninstall-btn").addEventListener("click", async () => {
   try {
     await invoke("service_uninstall");
-    toast("Служба удалена", "success");
+    toast(t("toast.serviceUninstalled"), "success");
     setTimeout(refreshServiceStatus, 1500);
   } catch (e) {
-    toast(`Ошибка: ${describeError(e)}`, "error");
+    toast(t("toast.error", { err: describeError(e) }), "error");
   }
 });
 
 async function refreshBinaryInfo() {
   try {
     const info = await invoke("binary_info");
-    $("#binary-path-info").textContent = `${info.path}${info.exists ? "" : " · ⚠ не найден"}`;
+    const pathEl = $("#binary-path-info");
+    pathEl.textContent = info.path;
+    if (!info.exists) {
+      const warn = document.createElement("span");
+      warn.className = "missing-tag";
+      const ic = document.createElement("span");
+      ic.className = "icon icon-alert";
+      warn.appendChild(ic);
+      warn.appendChild(document.createTextNode(t("settings.paths.notFound")));
+      pathEl.appendChild(document.createTextNode(" "));
+      pathEl.appendChild(warn);
+    }
   } catch (e) {
     $("#binary-path-info").textContent = String(e);
   }
@@ -519,39 +559,47 @@ function renderUpdateStatus(s) {
   const installBtn = $("#install-update-btn");
   if (!s.platform_supported) {
     badge.className = "badge warn";
-    badge.textContent = "Платформа не поддерживается";
+    badge.textContent = t("settings.update.platformUnsupported");
     installBtn.hidden = true;
   } else if (s.update_available) {
     badge.className = "badge warn";
-    badge.textContent = `Доступно обновление`;
+    badge.textContent = t("settings.update.available");
     installBtn.hidden = false;
   } else if (s.latest) {
     badge.className = "badge ok";
-    badge.textContent = "Актуальная версия";
+    badge.textContent = t("settings.update.upToDate");
     installBtn.hidden = true;
   } else {
     badge.className = "badge";
-    badge.textContent = "Не удалось проверить";
+    badge.textContent = t("settings.update.checkFailed");
     installBtn.hidden = true;
   }
 }
 
-async function refreshUpdateStatus() {
-  $("#update-badge").className = "badge";
-  $("#update-badge").textContent = "Проверка…";
+async function refreshUpdateStatus({ silent = false } = {}) {
+  // Show "Checking…" only when we have nothing better to show. Otherwise the
+  // cached/previous status stays visible while we refresh in the background.
+  if (!silent) {
+    $("#update-badge").className = "badge";
+    $("#update-badge").textContent = t("settings.update.checking");
+  }
   try {
     const s = await invoke("check_for_update");
     renderUpdateStatus(s);
   } catch (e) {
     $("#update-badge").className = "badge err";
-    $("#update-badge").textContent = "Ошибка проверки";
-    $("#update-current").textContent = "?";
-    $("#update-latest").textContent = "?";
-    toast(`Не удалось проверить обновления: ${describeError(e)}`, "error");
+    $("#update-badge").textContent = t("settings.update.checkFailed");
+    if (!silent) {
+      $("#update-current").textContent = "?";
+      $("#update-latest").textContent = "?";
+    }
+    if (!silent) {
+      toast(t("toast.updateCheckErr", { err: describeError(e) }), "error");
+    }
   }
 }
 
-$("#check-update-btn")?.addEventListener("click", refreshUpdateStatus);
+$("#check-update-btn")?.addEventListener("click", () => refreshUpdateStatus({ silent: false }));
 $("#install-update-btn")?.addEventListener("click", async () => {
   $("#install-update-btn").disabled = true;
   $("#update-progress-line").hidden = false;
@@ -559,10 +607,10 @@ $("#install-update-btn")?.addEventListener("click", async () => {
   try {
     const s = await invoke("install_update");
     renderUpdateStatus(s);
-    toast(`Клиент обновлён до ${s.current}`, "success");
+    toast(t("toast.updateInstalled", { version: s.current }), "success");
     await refreshBinaryInfo();
   } catch (e) {
-    toast(`Ошибка установки обновления: ${describeError(e)}`, "error");
+    toast(t("toast.updateInstallErr", { err: describeError(e) }), "error");
   } finally {
     $("#install-update-btn").disabled = false;
     $("#update-progress-line").hidden = true;
@@ -586,7 +634,7 @@ listen("update://status", evt => {
 
 listen("update://installed", evt => {
   renderUpdateStatus(evt.payload);
-  toast(`Клиент обновлён до ${evt.payload.current} в фоне`, "success");
+  toast(t("toast.updateInstalledBg", { version: evt.payload.current }), "success");
   refreshBinaryInfo();
 });
 
@@ -599,20 +647,20 @@ function formatBytes(n) {
 $("#restart-admin-btn")?.addEventListener("click", async () => {
   try {
     await invoke("restart_as_admin");
-    toast("Запрос UAC отправлен — окно перезапустится", "success");
+    toast(t("toast.uacSent"), "success");
   } catch (e) {
-    toast(`Не удалось перезапустить: ${describeError(e)}`, "error");
+    toast(t("toast.restartFailed", { err: describeError(e) }), "error");
   }
 });
 
 $("#deeplink-register-btn")?.addEventListener("click", async () => {
   try {
-    const msg = await invoke("register_deeplink_scheme");
-    toast(msg, "success");
+    await invoke("register_deeplink_scheme");
+    toast(t("toast.deeplinkRegOk"), "success");
     $("#deeplink-badge").className = "badge ok";
-    $("#deeplink-badge").textContent = "Зарегистрировано";
+    $("#deeplink-badge").textContent = t("settings.deeplink.registered");
   } catch (e) {
-    toast(`Регистрация tt:// не удалась: ${describeError(e)}`, "error");
+    toast(t("toast.deeplinkRegErr", { err: describeError(e) }), "error");
   }
 });
 
@@ -620,13 +668,20 @@ $("#deeplink-test-btn")?.addEventListener("click", async () => {
   try {
     const text = await readText();
     if (!text) {
-      toast("Буфер пуст", "warn");
+      toast(t("toast.clipboardEmpty"), "warn");
       return;
     }
-    const preview = text.length > 800 ? text.slice(0, 800) + `\n…(ещё ${text.length - 800} символов)` : text;
-    toast(`Буфер (${text.length} симв.):\n\n${preview}`, "info", { copyable: true, sticky: true });
+    let preview = text;
+    if (text.length > 800) {
+      preview = text.slice(0, 800) + t("toast.bufferMore", { more: text.length - 800 });
+    }
+    toast(
+      t("toast.bufferContent", { len: text.length, preview }),
+      "info",
+      { copyable: true, sticky: true }
+    );
   } catch (e) {
-    toast(`Не удалось прочитать буфер: ${describeError(e)}`, "error");
+    toast(t("toast.bufferReadErr", { err: describeError(e) }), "error");
   }
 });
 
@@ -646,18 +701,109 @@ listen("deep-link://new-url", async evt => {
     if (typeof u === "string" && u.startsWith("tt://")) {
       try {
         const profile = await invoke("import_deeplink", { uri: u });
-        toast(`Импортирован deeplink: ${profile.name}`, "success");
+        toast(t("toast.deeplinkImported", { name: profile.name }), "success");
         await refreshProfiles();
         setTab("profiles");
       } catch (e) {
-        toast(`Не удалось импортировать ссылку: ${e}`, "error");
+        toast(t("toast.importErr", { err: describeError(e) }), "error");
       }
     }
   }
 });
 
+// ===== language switcher =====
+async function loadLanguageNames() {
+  // Each locale file has a "lang.name" key with its own native display name.
+  const names = {};
+  for (const code of listLocales()) {
+    try {
+      const res = await fetch(`./assets/locales/${code}.json`);
+      const data = await res.json();
+      names[code] = data["lang.name"] || code;
+    } catch {
+      names[code] = code;
+    }
+  }
+  return names;
+}
+
+function setupLanguageSwitcher(names) {
+  const wrap = $("#language-select");
+  const menu = $("#language-menu");
+  const value = $("#language-value");
+  const trigger = $("#language-trigger");
+
+  function rebuild() {
+    menu.innerHTML = "";
+    value.textContent = names[currentLocale()] || currentLocale();
+    for (const code of listLocales()) {
+      const opt = document.createElement("div");
+      opt.className = "custom-select-option" + (code === currentLocale() ? " selected" : "");
+      const span = document.createElement("span");
+      span.textContent = names[code] || code;
+      opt.appendChild(span);
+      opt.addEventListener("click", async () => {
+        wrap.classList.remove("open");
+        menu.hidden = true;
+        if (code === currentLocale()) return;
+        await setLocale(code);
+        toast(t("toast.langChanged"), "success");
+      });
+      menu.appendChild(opt);
+    }
+  }
+  rebuild();
+
+  trigger.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const open = wrap.classList.contains("open");
+    if (open) { wrap.classList.remove("open"); menu.hidden = true; }
+    else { wrap.classList.add("open"); menu.hidden = false; }
+  });
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest("#language-select")) {
+      wrap.classList.remove("open"); menu.hidden = true;
+    }
+  });
+
+  onLocaleChange(() => rebuild());
+}
+
 // ===== bootstrap =====
-(async function init() {
+(async function bootstrap() {
+  try {
+    await initI18n();
+  } catch (e) {
+    // i18n must never take down the rest of the app. Fall through with hard-coded
+    // defaults already present in the HTML.
+    console.error("i18n init failed:", e);
+  }
+  // Re-render dynamic state whenever the language changes.
+  onLocaleChange(() => {
+    renderActivePicker();
+    renderProfileList();
+    renderVpnState(state.vpnState);
+    refreshServiceStatus();
+    refreshBinaryInfo();
+    if (!$("#profile-modal").hidden) {
+      // Re-render the open modal title and exclusions label.
+      updateExclusionsLabel();
+      const editing = state.editingProfile;
+      if (editing) {
+        $("#profile-modal-title").textContent = editing.name
+          ? t("modal.profile.titleNamed", { name: editing.name })
+          : t("modal.profile.titleNew");
+      }
+    }
+  });
+
+  try {
+    const langNames = await loadLanguageNames();
+    setupLanguageSwitcher(langNames);
+  } catch (e) {
+    console.error("language switcher setup failed:", e);
+  }
+
   await refreshProfiles();
   state.vpnState = await invoke("vpn_state");
   renderVpnState(state.vpnState);
@@ -666,5 +812,30 @@ listen("deep-link://new-url", async evt => {
   await refreshServiceStatus();
   await refreshBinaryInfo();
   await refreshElevation();
-  refreshUpdateStatus();
+
+  // Show cached update status immediately so the badge isn't stuck on "Checking…"
+  // while we wait for the network. Then do a fresh check in the background; if we
+  // have a cached value the refresh is silent (badge keeps showing the previous
+  // result until the new one arrives).
+  let hadCached = false;
+  try {
+    const cached = await invoke("cached_update_status");
+    if (cached) {
+      renderUpdateStatus(cached);
+      hadCached = true;
+    }
+  } catch (_) {}
+  refreshUpdateStatus({ silent: hadCached });
+
+  // Restore the last opened tab.
+  try {
+    const settings = await invoke("get_settings");
+    if (settings && settings.last_tab) {
+      const valid = ["home", "profiles", "settings", "logs"];
+      if (valid.includes(settings.last_tab)) {
+        // Switch without re-persisting (setTab does persist, but the same value is a no-op).
+        setTab(settings.last_tab);
+      }
+    }
+  } catch (_) {}
 })();

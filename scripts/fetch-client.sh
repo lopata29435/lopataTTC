@@ -34,11 +34,16 @@ mkdir -p "$RES_DIR"
 
 if [[ -z "$TAG" ]]; then
   echo "Fetching latest release tag..."
+  # Portable JSON extraction — works with GNU/BSD awk, no jq dependency.
   TAG=$(curl -sSL \
     -H "Accept: application/vnd.github+json" \
     -H "User-Agent: trusttunnel-gui-ci" \
     https://api.github.com/repos/TrustTunnel/TrustTunnelClient/releases/latest \
-    | grep -oP '"tag_name":\s*"\K[^"]+')
+    | awk -F'"' '/"tag_name"[[:space:]]*:/ { print $4; exit }')
+  if [[ -z "$TAG" ]]; then
+    echo "Could not determine latest TrustTunnel client tag" >&2
+    exit 1
+  fi
   echo "Latest tag: $TAG"
 fi
 
