@@ -61,7 +61,11 @@ pub fn asset_name_for_current_platform(tag: &str) -> Option<String> {
 }
 
 pub fn binary_file_name() -> &'static str {
-    if cfg!(windows) { "trusttunnel_client.exe" } else { "trusttunnel_client" }
+    if cfg!(windows) {
+        "trusttunnel_client.exe"
+    } else {
+        "trusttunnel_client"
+    }
 }
 
 /// Look in app_data_dir/clients/v<version>/ for the newest installed version.
@@ -85,7 +89,10 @@ pub fn locate_installed_client(app_data_dir: &Path) -> Option<(String, PathBuf)>
         }
     }
     candidates.sort_by(|a, b| b.0.cmp(&a.0));
-    candidates.into_iter().next().map(|(_, bin, name)| (name, bin))
+    candidates
+        .into_iter()
+        .next()
+        .map(|(_, bin, name)| (name, bin))
 }
 
 pub async fn fetch_latest_release() -> Result<ReleaseInfo> {
@@ -113,7 +120,9 @@ pub fn build_status(
     latest: Option<&ReleaseInfo>,
 ) -> UpdateStatus {
     let installed = locate_installed_client(app_data_dir);
-    let current = installed.as_ref().map(|(v, _)| v.clone())
+    let current = installed
+        .as_ref()
+        .map(|(v, _)| v.clone())
         .or_else(|| Some(format!("v{}", bundled_version.trim_start_matches('v'))));
     let installed_path = installed.as_ref().map(|(_, p)| p.display().to_string());
 
@@ -162,8 +171,7 @@ pub async fn download_and_install(
     if dest_dir.exists() {
         std::fs::remove_dir_all(&dest_dir).ok();
     }
-    std::fs::create_dir_all(&dest_dir)
-        .with_context(|| format!("create {}", dest_dir.display()))?;
+    std::fs::create_dir_all(&dest_dir).with_context(|| format!("create {}", dest_dir.display()))?;
 
     let temp_path = dest_dir.join(format!("download.{}", extension_of(&asset.name)));
 
@@ -172,7 +180,10 @@ pub async fn download_and_install(
         .user_agent(USER_AGENT)
         .timeout(std::time::Duration::from_secs(120))
         .build()?;
-    let resp = client.get(&asset.browser_download_url).send().await
+    let resp = client
+        .get(&asset.browser_download_url)
+        .send()
+        .await
         .context("download request failed")?;
     if !resp.status().is_success() {
         bail!("download HTTP {}", resp.status());
@@ -192,13 +203,16 @@ pub async fn download_and_install(
     drop(file);
 
     // Extract.
-    extract_archive(&temp_path, &dest_dir)
-        .with_context(|| format!("extract {}", asset.name))?;
+    extract_archive(&temp_path, &dest_dir).with_context(|| format!("extract {}", asset.name))?;
     let _ = std::fs::remove_file(&temp_path);
 
     // Find the binary in the extracted tree (may be in a subdirectory).
-    let binary = find_binary_recursive(&dest_dir)
-        .ok_or_else(|| anyhow!("после распаковки бинарник не найден в {}", dest_dir.display()))?;
+    let binary = find_binary_recursive(&dest_dir).ok_or_else(|| {
+        anyhow!(
+            "после распаковки бинарник не найден в {}",
+            dest_dir.display()
+        )
+    })?;
 
     // Ensure executable bit on Unix.
     #[cfg(unix)]
@@ -228,15 +242,24 @@ pub async fn download_and_install(
         }
     }
 
-    let final_path = if canonical.exists() { canonical } else { binary };
+    let final_path = if canonical.exists() {
+        canonical
+    } else {
+        binary
+    };
     Ok(final_path)
 }
 
 fn extension_of(name: &str) -> &'static str {
-    if name.ends_with(".tar.gz") { "tar.gz" }
-    else if name.ends_with(".zip") { "zip" }
-    else if name.ends_with(".tar") { "tar" }
-    else { "bin" }
+    if name.ends_with(".tar.gz") {
+        "tar.gz"
+    } else if name.ends_with(".zip") {
+        "zip"
+    } else if name.ends_with(".tar") {
+        "tar"
+    } else {
+        "bin"
+    }
 }
 
 fn extract_archive(archive: &Path, dest: &Path) -> Result<()> {

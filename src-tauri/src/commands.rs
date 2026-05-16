@@ -141,7 +141,8 @@ pub fn binary_info(state: State<AppState>) -> serde_json::Value {
 #[tauri::command]
 pub fn open_app_data_folder(_app: AppHandle, state: State<AppState>) -> Result<String, String> {
     let dir = state.app_data_dir.clone();
-    std::fs::create_dir_all(&dir).map_err(|e| format!("create_dir_all {}: {}", dir.display(), e))?;
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("create_dir_all {}: {}", dir.display(), e))?;
     // Touch a marker file to make sure the directory is properly materialized.
     let marker = dir.join(".keep");
     let _ = std::fs::write(&marker, b"");
@@ -172,7 +173,11 @@ pub fn open_app_data_folder(_app: AppHandle, state: State<AppState>) -> Result<S
     }
     #[cfg(not(windows))]
     {
-        let cmd = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
+        let cmd = if cfg!(target_os = "macos") {
+            "open"
+        } else {
+            "xdg-open"
+        };
         std::process::Command::new(cmd)
             .arg(&dir)
             .spawn()
@@ -239,7 +244,9 @@ pub fn quit_app(app: AppHandle) {
 pub async fn check_for_update(state: State<'_, AppState>) -> Result<updater::UpdateStatus, String> {
     let app_data_dir = state.app_data_dir.clone();
     let settings = state.settings.clone();
-    let release = updater::fetch_latest_release().await.map_err(|e| e.to_string())?;
+    let release = updater::fetch_latest_release()
+        .await
+        .map_err(|e| e.to_string())?;
     let status = updater::build_status(&app_data_dir, BUNDLED_CLIENT_VERSION, Some(&release));
     // Cache for next launch.
     let _ = settings.patch(crate::settings::Settings {
@@ -273,7 +280,9 @@ pub async fn install_update(
     state: State<'_, AppState>,
 ) -> Result<updater::UpdateStatus, String> {
     let app_data_dir = state.app_data_dir.clone();
-    let release = updater::fetch_latest_release().await.map_err(|e| e.to_string())?;
+    let release = updater::fetch_latest_release()
+        .await
+        .map_err(|e| e.to_string())?;
     let app2 = app.clone();
     let progress = move |done: u64, total: Option<u64>| {
         let _ = app2.emit(
@@ -286,10 +295,11 @@ pub async fn install_update(
         .map_err(|e| e.to_string())?;
 
     // Activate the new binary immediately.
-    let app_state: State<AppState> = app.state();
-    *app_state.binary_path.lock().unwrap() = new_binary.clone();
-    app_state.vpn.set_binary_path(new_binary.clone());
-    drop(app_state);
+    {
+        let app_state: State<AppState> = app.state();
+        *app_state.binary_path.lock().unwrap() = new_binary.clone();
+        app_state.vpn.set_binary_path(new_binary.clone());
+    }
 
     let status = updater::build_status(&app_data_dir, BUNDLED_CLIENT_VERSION, Some(&release));
     Ok(status)

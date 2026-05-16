@@ -31,7 +31,10 @@ impl SettingsStore {
         } else {
             Settings::default()
         };
-        Ok(Self { path, inner: Mutex::new(inner) })
+        Ok(Self {
+            path,
+            inner: Mutex::new(inner),
+        })
     }
 
     pub fn get(&self) -> Settings {
@@ -42,9 +45,15 @@ impl SettingsStore {
     /// существующие, None оставляет как есть. Возвращает обновлённое состояние.
     pub fn patch(&self, patch: Settings) -> Result<Settings> {
         let mut s = self.inner.lock().unwrap();
-        if patch.language.is_some() { s.language = patch.language; }
-        if patch.last_tab.is_some() { s.last_tab = patch.last_tab; }
-        if patch.last_known_update.is_some() { s.last_known_update = patch.last_known_update; }
+        if patch.language.is_some() {
+            s.language = patch.language;
+        }
+        if patch.last_tab.is_some() {
+            s.last_tab = patch.last_tab;
+        }
+        if patch.last_known_update.is_some() {
+            s.last_known_update = patch.last_known_update;
+        }
         let snapshot = s.clone();
         drop(s);
         self.write(&snapshot).context("write settings.json")?;

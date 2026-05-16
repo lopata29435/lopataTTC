@@ -16,9 +16,7 @@ pub fn parse_tt_uri(uri: &str) -> Result<Profile> {
         .ok_or_else(|| anyhow!("URI must start with tt:// (got: {})", short(uri, 60)))?;
 
     // accept "tt://?xxx" and "tt://xxx" and "tt:///?xxx"
-    let payload = stripped
-        .trim_start_matches('/')
-        .trim_start_matches('?');
+    let payload = stripped.trim_start_matches('/').trim_start_matches('?');
 
     if payload.is_empty() {
         bail!("Пустой payload после tt://");
@@ -33,7 +31,10 @@ pub fn parse_tt_uri(uri: &str) -> Result<Profile> {
     // also try as query parameters (k=v&k=v)
     let params = parse_query(payload);
     if !params.is_empty() {
-        tried.push(format!("query params: {:?}", params.keys().collect::<Vec<_>>()));
+        tried.push(format!(
+            "query params: {:?}",
+            params.keys().collect::<Vec<_>>()
+        ));
         for key in ["config", "c", "data", "payload"] {
             if let Some(val) = params.get(key) {
                 if let Some(p) = try_decode_payload(val, &mut tried) {
@@ -59,13 +60,15 @@ fn short(s: &str, n: usize) -> String {
         s.to_string()
     } else {
         let mut out: String = s.chars().take(n).collect();
-        out.push_str("…");
+        out.push('…');
         out
     }
 }
 
 fn try_decode_payload(payload: &str, tried: &mut Vec<String>) -> Option<Profile> {
-    let url_decoded = urlencoding::decode(payload).map(|c| c.into_owned()).unwrap_or_else(|_| payload.to_string());
+    let url_decoded = urlencoding::decode(payload)
+        .map(|c| c.into_owned())
+        .unwrap_or_else(|_| payload.to_string());
 
     if let Some(p) = parse_blob_as_profile(url_decoded.as_bytes()) {
         return Some(p);
@@ -79,7 +82,11 @@ fn try_decode_payload(payload: &str, tried: &mut Vec<String>) -> Option<Profile>
                     if let Some(p) = parse_blob_as_profile(&bytes) {
                         return Some(p);
                     }
-                    tried.push(format!("{}: декодировал {} байт, но это не JSON/TOML", $name, bytes.len()));
+                    tried.push(format!(
+                        "{}: декодировал {} байт, но это не JSON/TOML",
+                        $name,
+                        bytes.len()
+                    ));
                 }
                 Err(e) => {
                     tried.push(format!("{}: {}", $name, e));
@@ -90,8 +97,16 @@ fn try_decode_payload(payload: &str, tried: &mut Vec<String>) -> Option<Profile>
 
     try_engine!("base64 STANDARD (url-decoded)", &STANDARD, url_decoded);
     try_engine!("base64 URL_SAFE (url-decoded)", &URL_SAFE, url_decoded);
-    try_engine!("base64 STANDARD_NO_PAD (url-decoded)", &STANDARD_NO_PAD, url_decoded);
-    try_engine!("base64 URL_SAFE_NO_PAD (url-decoded)", &URL_SAFE_NO_PAD, url_decoded);
+    try_engine!(
+        "base64 STANDARD_NO_PAD (url-decoded)",
+        &STANDARD_NO_PAD,
+        url_decoded
+    );
+    try_engine!(
+        "base64 URL_SAFE_NO_PAD (url-decoded)",
+        &URL_SAFE_NO_PAD,
+        url_decoded
+    );
 
     if url_decoded != payload {
         try_engine!("base64 STANDARD (raw)", &STANDARD, payload);
@@ -148,10 +163,18 @@ fn parse_adguard_binary(bytes: &[u8]) -> Result<Profile> {
     let mut profile = Profile::new_blank("Imported");
 
     fn read_str(bytes: &[u8], i: &mut usize) -> Result<String> {
-        if *i >= bytes.len() { bail!("truncated: expected length byte"); }
+        if *i >= bytes.len() {
+            bail!("truncated: expected length byte");
+        }
         let len = bytes[*i] as usize;
         *i += 1;
-        if *i + len > bytes.len() { bail!("truncated: length {} exceeds remaining {}", len, bytes.len() - *i); }
+        if *i + len > bytes.len() {
+            bail!(
+                "truncated: length {} exceeds remaining {}",
+                len,
+                bytes.len() - *i
+            );
+        }
         let s = std::str::from_utf8(&bytes[*i..*i + len])
             .map_err(|e| anyhow!("invalid utf-8: {}", e))?
             .to_string();
@@ -165,7 +188,9 @@ fn parse_adguard_binary(bytes: &[u8]) -> Result<Profile> {
         match tag {
             0x01 => {
                 // count + list of strings
-                if i >= bytes.len() { bail!("truncated at field 0x01"); }
+                if i >= bytes.len() {
+                    bail!("truncated at field 0x01");
+                }
                 let count = bytes[i] as usize;
                 i += 1;
                 for n in 0..count {
@@ -190,11 +215,15 @@ fn parse_adguard_binary(bytes: &[u8]) -> Result<Profile> {
                 profile.name = read_str(bytes, &mut i)?;
             }
             0x0D => {
-                if i >= bytes.len() { bail!("truncated at field 0x0D"); }
+                if i >= bytes.len() {
+                    bail!("truncated at field 0x0D");
+                }
                 let total = bytes[i] as usize;
                 i += 1;
                 let end = i + total;
-                if end > bytes.len() { bail!("0x0D total exceeds buffer"); }
+                if end > bytes.len() {
+                    bail!("0x0D total exceeds buffer");
+                }
                 let mut dns = Vec::new();
                 while i < end {
                     let s = read_str(bytes, &mut i)?;
@@ -206,10 +235,18 @@ fn parse_adguard_binary(bytes: &[u8]) -> Result<Profile> {
             }
             _ => {
                 // Unknown tag — skip as length-prefixed value.
-                if i >= bytes.len() { break; }
+                if i >= bytes.len() {
+                    break;
+                }
                 let len = bytes[i] as usize;
                 i += 1;
-                if i + len > bytes.len() { bail!("unknown tag 0x{:02X} has length {} exceeding buffer", tag, len); }
+                if i + len > bytes.len() {
+                    bail!(
+                        "unknown tag 0x{:02X} has length {} exceeding buffer",
+                        tag,
+                        len
+                    );
+                }
                 i += len;
             }
         }
@@ -228,22 +265,45 @@ fn parse_adguard_binary(bytes: &[u8]) -> Result<Profile> {
 fn profile_from_json(v: &JsonValue) -> Option<Profile> {
     let obj = v.as_object()?;
     // The endpoint fields may be nested under "endpoint" or at the top.
-    let endpoint_obj = obj.get("endpoint").and_then(|x| x.as_object()).unwrap_or(obj);
+    let endpoint_obj = obj
+        .get("endpoint")
+        .and_then(|x| x.as_object())
+        .unwrap_or(obj);
 
-    let s = |k: &str| endpoint_obj.get(k).and_then(|x| x.as_str()).map(String::from);
+    let s = |k: &str| {
+        endpoint_obj
+            .get(k)
+            .and_then(|x| x.as_str())
+            .map(String::from)
+    };
     let b = |k: &str| endpoint_obj.get(k).and_then(|x| x.as_bool());
-    let arr = |k: &str| endpoint_obj.get(k)
-        .and_then(|x| x.as_array())
-        .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect::<Vec<_>>())
-        .unwrap_or_default();
+    let arr = |k: &str| {
+        endpoint_obj
+            .get(k)
+            .and_then(|x| x.as_array())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|x| x.as_str().map(String::from))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default()
+    };
 
     let hostname = s("hostname").or_else(|| s("host")).unwrap_or_default();
     if hostname.is_empty() {
         return None;
     }
 
-    let name = obj.get("name").and_then(|x| x.as_str()).map(String::from)
-        .or_else(|| endpoint_obj.get("name").and_then(|x| x.as_str()).map(String::from))
+    let name = obj
+        .get("name")
+        .and_then(|x| x.as_str())
+        .map(String::from)
+        .or_else(|| {
+            endpoint_obj
+                .get("name")
+                .and_then(|x| x.as_str())
+                .map(String::from)
+        })
         .unwrap_or_else(|| hostname.clone());
 
     let mut profile = Profile::new_blank(&name);
@@ -252,18 +312,32 @@ fn profile_from_json(v: &JsonValue) -> Option<Profile> {
     profile.username = s("username").or_else(|| s("user")).unwrap_or_default();
     profile.password = s("password").or_else(|| s("pass")).unwrap_or_default();
     profile.custom_sni = s("custom_sni").or_else(|| s("sni")).unwrap_or_default();
-    if let Some(v) = b("has_ipv6") { profile.has_ipv6 = v; }
+    if let Some(v) = b("has_ipv6") {
+        profile.has_ipv6 = v;
+    }
     profile.upstream_protocol = s("upstream_protocol").unwrap_or_else(|| "http2".into());
-    if let Some(v) = b("anti_dpi") { profile.anti_dpi = v; }
+    if let Some(v) = b("anti_dpi") {
+        profile.anti_dpi = v;
+    }
     let dns = arr("dns_upstreams");
-    if !dns.is_empty() { profile.dns_upstreams = dns; }
-    if let Some(v) = b("skip_verification") { profile.skip_verification = v; }
+    if !dns.is_empty() {
+        profile.dns_upstreams = dns;
+    }
+    if let Some(v) = b("skip_verification") {
+        profile.skip_verification = v;
+    }
     Some(profile)
 }
 
 fn profile_from_params(params: &HashMap<String, String>) -> Option<Profile> {
-    let hostname = params.get("hostname").or_else(|| params.get("host"))?.clone();
-    let name = params.get("name").cloned().unwrap_or_else(|| hostname.clone());
+    let hostname = params
+        .get("hostname")
+        .or_else(|| params.get("host"))?
+        .clone();
+    let name = params
+        .get("name")
+        .cloned()
+        .unwrap_or_else(|| hostname.clone());
     let mut profile = Profile::new_blank(&name);
     profile.hostname = hostname;
     if let Some(p) = params.get("port") {
@@ -278,7 +352,10 @@ fn profile_from_params(params: &HashMap<String, String>) -> Option<Profile> {
     if let Some(s) = params.get("sni").or_else(|| params.get("custom_sni")) {
         profile.custom_sni = s.clone();
     }
-    if let Some(p) = params.get("protocol").or_else(|| params.get("upstream_protocol")) {
+    if let Some(p) = params
+        .get("protocol")
+        .or_else(|| params.get("upstream_protocol"))
+    {
         profile.upstream_protocol = p.clone();
     }
     Some(profile)
@@ -287,12 +364,18 @@ fn profile_from_params(params: &HashMap<String, String>) -> Option<Profile> {
 fn parse_query(q: &str) -> HashMap<String, String> {
     let mut out = HashMap::new();
     for pair in q.split('&') {
-        if pair.is_empty() { continue; }
+        if pair.is_empty() {
+            continue;
+        }
         let mut it = pair.splitn(2, '=');
         let k = it.next().unwrap_or("");
         let v = it.next().unwrap_or("");
-        let k = urlencoding::decode(k).map(|c| c.into_owned()).unwrap_or_else(|_| k.to_string());
-        let v = urlencoding::decode(v).map(|c| c.into_owned()).unwrap_or_else(|_| v.to_string());
+        let k = urlencoding::decode(k)
+            .map(|c| c.into_owned())
+            .unwrap_or_else(|_| k.to_string());
+        let v = urlencoding::decode(v)
+            .map(|c| c.into_owned())
+            .unwrap_or_else(|_| v.to_string());
         if !k.is_empty() {
             out.insert(k, v);
         }

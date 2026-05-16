@@ -91,7 +91,10 @@ impl VpnService {
     }
 
     fn push_log(&self, app: &AppHandle, line: String, level: &str) {
-        let payload = LogPayload { line, level: level.into() };
+        let payload = LogPayload {
+            line,
+            level: level.into(),
+        };
         {
             let mut buf = self.log_buffer.lock().unwrap();
             if buf.len() >= MAX_LOG_LINES {
@@ -123,14 +126,24 @@ impl VpnService {
         std::fs::write(&self.config_path, toml_text)
             .with_context(|| format!("write config to {}", self.config_path.display()))?;
 
-        self.set_state(&app, StatePayload {
-            state: ConnectionState::Connecting,
-            profile_id: Some(profile.id.clone()),
-            profile_name: Some(profile.name.clone()),
-            message: Some(format!("Подключение к {}...", profile.hostname)),
-            started_at: None,
-        });
-        self.push_log(&app, format!("=== Запуск клиента: профиль \"{}\" ({}) ===", profile.name, profile.hostname), "info");
+        self.set_state(
+            &app,
+            StatePayload {
+                state: ConnectionState::Connecting,
+                profile_id: Some(profile.id.clone()),
+                profile_name: Some(profile.name.clone()),
+                message: Some(format!("Подключение к {}...", profile.hostname)),
+                started_at: None,
+            },
+        );
+        self.push_log(
+            &app,
+            format!(
+                "=== Запуск клиента: профиль \"{}\" ({}) ===",
+                profile.name, profile.hostname
+            ),
+            "info",
+        );
 
         let binary_path = self.binary_path();
         let mut cmd = Command::new(&binary_path);
@@ -146,7 +159,11 @@ impl VpnService {
         }
 
         let mut child = cmd.spawn().map_err(|e| {
-            anyhow!("Не удалось запустить trusttunnel_client.exe: {} (путь: {})", e, binary_path.display())
+            anyhow!(
+                "Не удалось запустить trusttunnel_client.exe: {} (путь: {})",
+                e,
+                binary_path.display()
+            )
         })?;
 
         let stdout = child.stdout.take();
@@ -172,7 +189,15 @@ impl VpnService {
             tokio::spawn(async move {
                 let mut reader = BufReader::new(stdout).lines();
                 while let Ok(Some(line)) = reader.next_line().await {
-                    handle_log_line(&app2, &state2, &log_buffer2, &profile_id2, &profile_name2, &line, "info");
+                    handle_log_line(
+                        &app2,
+                        &state2,
+                        &log_buffer2,
+                        &profile_id2,
+                        &profile_name2,
+                        &line,
+                        "info",
+                    );
                 }
             });
         }
@@ -185,7 +210,15 @@ impl VpnService {
             tokio::spawn(async move {
                 let mut reader = BufReader::new(stderr).lines();
                 while let Ok(Some(line)) = reader.next_line().await {
-                    handle_log_line(&app2, &state2, &log_buffer2, &profile_id2, &profile_name2, &line, "warn");
+                    handle_log_line(
+                        &app2,
+                        &state2,
+                        &log_buffer2,
+                        &profile_id2,
+                        &profile_name2,
+                        &line,
+                        "warn",
+                    );
                 }
             });
         }
@@ -218,7 +251,10 @@ impl VpnService {
                                 },
                                 profile_id: Some(profile_id_w.clone()),
                                 profile_name: Some(profile_name_w.clone()),
-                                message: Some(format!("Клиент завершился (код {})", status.code().unwrap_or(-1))),
+                                message: Some(format!(
+                                    "Клиент завершился (код {})",
+                                    status.code().unwrap_or(-1)
+                                )),
                                 started_at: None,
                             };
                             {
@@ -270,10 +306,9 @@ impl VpnService {
                         let _ = GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, pid);
                     }
                     // small grace period
-                    let _ = tokio::time::timeout(
-                        std::time::Duration::from_millis(1500),
-                        child.wait(),
-                    ).await;
+                    let _ =
+                        tokio::time::timeout(std::time::Duration::from_millis(1500), child.wait())
+                            .await;
                 }
             }
             // Force kill if still alive
@@ -297,7 +332,11 @@ fn handle_log_line(
         return;
     }
     let lower = line.to_ascii_lowercase();
-    let level = if lower.contains("error") || lower.contains(" err ") || lower.contains("failed") || lower.contains("fatal") {
+    let level = if lower.contains("error")
+        || lower.contains(" err ")
+        || lower.contains("failed")
+        || lower.contains("fatal")
+    {
         "error"
     } else if lower.contains("warn") {
         "warn"
@@ -306,7 +345,10 @@ fn handle_log_line(
     };
 
     {
-        let payload = LogPayload { line: line.to_string(), level: level.to_string() };
+        let payload = LogPayload {
+            line: line.to_string(),
+            level: level.to_string(),
+        };
         let mut buf = log_buffer.lock().unwrap();
         if buf.len() >= MAX_LOG_LINES {
             buf.pop_front();
@@ -319,10 +361,24 @@ fn handle_log_line(
     {
         let cur = state.lock().unwrap().clone();
         // Connection-up heuristics: "connected", "established", "tunnel ready", "session opened"
-        let up_markers = ["connected to", "tunnel established", "tunnel ready", "session established", "successfully connected", "vpn active"];
-        let err_markers = ["authentication failed", "connection failed", "unable to connect", "fatal", "could not start"];
+        let up_markers = [
+            "connected to",
+            "tunnel established",
+            "tunnel ready",
+            "session established",
+            "successfully connected",
+            "vpn active",
+        ];
+        let err_markers = [
+            "authentication failed",
+            "connection failed",
+            "unable to connect",
+            "fatal",
+            "could not start",
+        ];
 
-        if cur.state == ConnectionState::Connecting && up_markers.iter().any(|m| lower.contains(m)) {
+        if cur.state == ConnectionState::Connecting && up_markers.iter().any(|m| lower.contains(m))
+        {
             transition = Some(StatePayload {
                 state: ConnectionState::Connected,
                 profile_id: Some(profile_id.into()),

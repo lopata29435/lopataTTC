@@ -1,11 +1,11 @@
-pub mod profiles;
-pub mod deeplink;
-pub mod vpn;
-pub mod elevate;
-pub mod service;
 pub mod commands;
-pub mod updater;
+pub mod deeplink;
+pub mod elevate;
+pub mod profiles;
+pub mod service;
 pub mod settings;
+pub mod updater;
+pub mod vpn;
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -132,7 +132,7 @@ pub fn run() {
             app.manage(state);
 
             // Build system tray
-            build_tray(&app.handle())?;
+            build_tray(app.handle())?;
 
             // Background: check for a newer client release and download it silently.
             let app_handle = app.handle().clone();
@@ -221,7 +221,10 @@ async fn auto_update_check(app: AppHandle, app_data_dir: PathBuf) -> anyhow::Res
 
     let app2 = app.clone();
     let progress = move |done: u64, total: Option<u64>| {
-        let _ = app2.emit("update://progress", serde_json::json!({ "done": done, "total": total }));
+        let _ = app2.emit(
+            "update://progress",
+            serde_json::json!({ "done": done, "total": total }),
+        );
     };
     let new_binary = updater::download_and_install(&release, &app_data_dir, progress).await?;
 
@@ -253,7 +256,11 @@ fn pick_app_data_dir() -> Option<PathBuf> {
     #[cfg(target_os = "macos")]
     {
         if let Some(home) = directories::BaseDirs::new() {
-            return Some(home.home_dir().join("Library/Application Support").join(APP_FOLDER));
+            return Some(
+                home.home_dir()
+                    .join("Library/Application Support")
+                    .join(APP_FOLDER),
+            );
         }
     }
     #[cfg(target_os = "linux")]
@@ -280,8 +287,15 @@ fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> std::io::
     Ok(())
 }
 
-fn resolve_binary_path(resource_dir: Option<&std::path::Path>, app_data_dir: &std::path::Path) -> PathBuf {
-    let bin_name = if cfg!(windows) { "trusttunnel_client.exe" } else { "trusttunnel_client" };
+fn resolve_binary_path(
+    resource_dir: Option<&std::path::Path>,
+    app_data_dir: &std::path::Path,
+) -> PathBuf {
+    let bin_name = if cfg!(windows) {
+        "trusttunnel_client.exe"
+    } else {
+        "trusttunnel_client"
+    };
 
     // 1. resources/<binary>
     if let Some(rd) = resource_dir {
@@ -308,8 +322,7 @@ fn resolve_binary_path(resource_dir: Option<&std::path::Path>, app_data_dir: &st
         }
     }
     // 3. fallback: user data dir
-    let fallback = app_data_dir.join(bin_name);
-    fallback
+    app_data_dir.join(bin_name)
 }
 
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {

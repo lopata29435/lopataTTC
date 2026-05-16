@@ -51,7 +51,9 @@ pub fn run_elevated(_exe: &Path, _args: &str, _working_dir: Option<&Path>) -> Re
 #[cfg(windows)]
 pub fn is_elevated() -> bool {
     use windows::Win32::Foundation::HANDLE;
-    use windows::Win32::Security::{GetTokenInformation, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY};
+    use windows::Win32::Security::{
+        GetTokenInformation, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY,
+    };
     use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 
     unsafe {
@@ -67,11 +69,14 @@ pub fn is_elevated() -> bool {
             Some(&mut elevation as *mut _ as *mut _),
             std::mem::size_of::<TOKEN_ELEVATION>() as u32,
             &mut ret_len,
-        ).is_ok();
+        )
+        .is_ok();
         let _ = windows::Win32::Foundation::CloseHandle(token);
         ok && elevation.TokenIsElevated != 0
     }
 }
 
 #[cfg(not(windows))]
-pub fn is_elevated() -> bool { false }
+pub fn is_elevated() -> bool {
+    false
+}
