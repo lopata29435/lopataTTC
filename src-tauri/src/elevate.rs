@@ -50,8 +50,29 @@ pub fn run_elevated(exe: &Path, args: &str, working_dir: Option<&Path>) -> Resul
 /// if it wanted to "restart as admin".
 #[cfg(target_os = "linux")]
 pub fn run_elevated(exe: &Path, args: &str, working_dir: Option<&Path>) -> Result<()> {
-    use std::process::Command;
+    use std::os::unix::process::CommandExt;
+    use std::process::{Command, Stdio};
+
     let mut cmd = Command::new("pkexec");
+    // pkexec resets the environment to a tiny safe-list by default. We have
+    // to re-inject DISPLAY / WAYLAND_DISPLAY / XAUTHORITY / XDG_RUNTIME_DIR so
+    // the elevated binary can actually connect to the user's GUI session.
+    // (`env` is a tiny POSIX utility that sets env vars then execs the next arg.)
+    cmd.arg("env");
+    for var in [
+        "DISPLAY",
+        "WAYLAND_DISPLAY",
+        "XAUTHORITY",
+        "XDG_RUNTIME_DIR",
+        "XDG_SESSION_TYPE",
+        "DBUS_SESSION_BUS_ADDRESS",
+    ] {
+        if let Ok(v) = std::env::var(var) {
+            if !v.is_empty() {
+                cmd.arg(format!("{}={}", var, v));
+            }
+        }
+    }
     cmd.arg(exe);
     if !args.trim().is_empty() {
         let parts = shlex::split(args).ok_or_else(|| anyhow!("malformed args: {}", args))?;
@@ -62,6 +83,17 @@ pub fn run_elevated(exe: &Path, args: &str, working_dir: Option<&Path>) -> Resul
     if let Some(dir) = working_dir {
         cmd.current_dir(dir);
     }
+    // Detach: new session means our SIGHUP on exit won't kill the child.
+    unsafe {
+        cmd.pre_exec(|| {
+            libc::setsid();
+            Ok(())
+        });
+    }
+    cmd.stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+
     cmd.spawn()
         .map_err(|e| anyhow!("pkexec spawn failed: {} — установлен ли pkexec/PolicyKit?", e))?;
     Ok(())
