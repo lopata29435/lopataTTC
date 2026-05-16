@@ -1,3 +1,4 @@
+use crate::app_updater;
 use crate::deeplink;
 use crate::profiles::Profile;
 use crate::service;
@@ -259,6 +260,70 @@ pub async fn check_for_update(state: State<'_, AppState>) -> Result<updater::Upd
 #[tauri::command]
 pub fn cached_update_status(state: State<AppState>) -> Option<serde_json::Value> {
     state.settings.get().last_known_update
+}
+
+#[derive(serde::Serialize)]
+pub struct AllUpdatesStatus {
+    pub client: updater::UpdateStatus,
+    pub app: app_updater::AppUpdateStatus,
+}
+
+/// One-shot check that hits BOTH update sources at once and caches the results.
+/// Used by the unified "Проверить" button in Settings.
+#[tauri::command]
+pub async fn check_all_updates(state: State<'_, AppState>) -> Result<AllUpdatesStatus, String> {
+    let app_data_dir = state.app_data_dir.clone();
+    let settings_store = state.settings.clone();
+
+    // Run both fetches concurrently.
+    let (client_release, app_status) = tokio::join!(
+        updater::fetch_latest_release(),
+        app_updater::fetch_latest(),
+    );
+
+    let client = client_release
+        .map(|rel| updater::build_status(&app_data_dir, None, Some(&rel)))
+        .map_err(|e| format!("VPN-клиент: {}", e))?;
+
+    let app = app_status.unwrap_or_else(|_| app_updater::fallback_status());
+
+    let _ = settings_store.patch(crate::settings::Settings {
+        last_known_update: Some(serde_json::to_value(&client).unwrap_or_default()),
+        last_known_app_update: Some(serde_json::to_value(&app).unwrap_or_default()),
+        ..Default::default()
+    });
+
+    Ok(AllUpdatesStatus { client, app })
+}
+
+#[tauri::command]
+pub fn cached_app_update_status(state: State<AppState>) -> Option<serde_json::Value> {
+    state.settings.get().last_known_app_update
+}
+
+#[tauri::command]
+pub fn app_version() -> String {
+    app_updater::current_version()
+}
+
+#[tauri::command]
+pub fn open_app_release_page(
+    app: AppHandle,
+    state: State<AppState>,
+) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    // Prefer the cached release URL (specific version page) if available;
+    // otherwise the generic /releases/latest page.
+    let cached = state.settings.get().last_known_app_update;
+    let url = cached
+        .as_ref()
+        .and_then(|v| v.get("release_url"))
+        .and_then(|v| v.as_str())
+        .map(String::from)
+        .unwrap_or_else(|| "https://github.com/lopata29435/lopataTTC/releases/latest".to_string());
+    app.opener()
+        .open_url(url, None::<&str>)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

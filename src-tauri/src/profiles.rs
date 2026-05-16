@@ -365,6 +365,11 @@ impl ProfileStore {
         } else {
             inner.profiles.push(profile.clone());
         }
+        // If nothing was active before, make this profile active so the user can
+        // press Connect immediately without an extra "Make active" click.
+        if inner.active.is_none() {
+            inner.active = Some(profile.id.clone());
+        }
         self.persist_profile(&profile)?;
         self.persist_index(&inner)?;
         Ok(profile)
@@ -373,8 +378,10 @@ impl ProfileStore {
     pub fn delete(&self, id: &str) -> Result<()> {
         let mut inner = self.inner.lock().unwrap();
         inner.profiles.retain(|p| p.id != id);
+        // If we removed the currently active profile, fall back to the first
+        // remaining one instead of leaving the user with nothing selected.
         if inner.active.as_deref() == Some(id) {
-            inner.active = None;
+            inner.active = inner.profiles.first().map(|p| p.id.clone());
         }
         let path = self.profile_path(id);
         if path.exists() {

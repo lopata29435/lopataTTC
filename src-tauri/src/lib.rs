@@ -1,3 +1,4 @@
+pub mod app_updater;
 pub mod commands;
 pub mod deeplink;
 pub mod elevate;
@@ -163,6 +164,10 @@ pub fn run() {
             commands::check_for_update,
             commands::cached_update_status,
             commands::install_update,
+            commands::check_all_updates,
+            commands::cached_app_update_status,
+            commands::app_version,
+            commands::open_app_release_page,
             commands::get_settings,
             commands::update_settings,
             commands::list_profiles,
@@ -201,7 +206,46 @@ pub fn run() {
 /// and (if a newer version is available) downloads + installs it, then emits
 /// `update://installed` so the UI can offer a switch.
 async fn auto_update_check(app: AppHandle, app_data_dir: PathBuf) -> anyhow::Result<()> {
-    let release = updater::fetch_latest_release().await?;
+    // Kick off the GUI self-update check in parallel, independent of the client
+    // check (so a network failure for one doesn't block the other).
+    {
+        let app_handle = app.clone();
+        let state: tauri::State<AppState> = app.state();
+        let settings_for_app_check = state.settings.clone();
+        tauri::async_runtime::spawn(async move {
+            if let Ok(app_status) = app_updater::fetch_latest().await {
+                let _ = settings_for_app_check.patch(settings::Settings {
+                    last_known_app_update: Some(
+                        serde_json::to_value(&app_status).unwrap_or_default(),
+                    ),
+                    ..Default::default()
+                });
+                let _ = app_handle.emit("update://app-status", &app_status);
+            }
+        });
+    }
+
+    let result = updater::fetch_latest_release().await;
+    let release = match result {
+        Ok(r) => r,
+        Err(e) => {
+            // Surface a failure status so the UI can drop out of the "Checking…"
+            // state instead of hanging forever on a network error.
+            let _ = app.emit(
+                "update://status",
+                &updater::UpdateStatus {
+                    current: None,
+                    latest: None,
+                    asset_name: None,
+                    platform_supported: true,
+                    update_available: false,
+                    installed_path: None,
+                    needs_initial_install: true,
+                },
+            );
+            return Err(e);
+        }
+    };
     let status = updater::build_status(&app_data_dir, None, Some(&release));
     // Cache for the frontend (which may not be ready to receive the event yet)
     // and for the next launch.

@@ -86,8 +86,6 @@ function formatDuration(seconds) {
 function setTab(name) {
   $$(".nav-item").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
   $$(".tab").forEach(s => s.classList.toggle("active", s.dataset.tab === name));
-  // Persist last opened tab for next launch (fire-and-forget).
-  invoke("update_settings", { patch: { last_tab: name } }).catch(() => {});
 }
 $$(".nav-item").forEach(b => b.addEventListener("click", () => setTab(b.dataset.tab)));
 
@@ -133,16 +131,21 @@ function renderProfileList() {
     const actBtn = card.querySelector('[data-action="activate"]');
     const editBtn = card.querySelector('[data-action="edit"]');
     const delBtn = card.querySelector('[data-action="delete"]');
-    actBtn.textContent = t("profiles.card.activate");
     editBtn.textContent = t("profiles.card.edit");
     delBtn.textContent = t("profiles.card.delete");
-    actBtn.onclick = async () => {
-      await invoke("set_active_profile_id", { id: p.id });
-      state.activeId = p.id;
-      renderProfileList();
-      renderActivePicker();
-      toast(t("toast.activeChanged", { name: p.name }), "success");
-    };
+    // "Make active" only makes sense when this card is NOT the active one.
+    if (p.id === state.activeId) {
+      actBtn.remove();
+    } else {
+      actBtn.textContent = t("profiles.card.activate");
+      actBtn.onclick = async () => {
+        await invoke("set_active_profile_id", { id: p.id });
+        state.activeId = p.id;
+        renderProfileList();
+        renderActivePicker();
+        toast(t("toast.activeChanged", { name: p.name }), "success");
+      };
+    }
     editBtn.onclick = () => openProfileModal(p);
     delBtn.onclick = async () => {
       if (!confirm(t("confirm.deleteProfile", { name: p.name }))) return;
@@ -553,8 +556,8 @@ async function refreshElevation() {
 }
 
 function renderUpdateStatus(s) {
-  $("#update-current").textContent = s.current || "?";
-  $("#update-latest").textContent = s.latest || "?";
+  $("#update-current").textContent = s.current || t("settings.update.unknown");
+  $("#update-latest").textContent = s.latest || t("settings.update.unknown");
   const badge = $("#update-badge");
   const installBtn = $("#install-update-btn");
   if (!s.platform_supported) {
@@ -576,30 +579,56 @@ function renderUpdateStatus(s) {
   }
 }
 
-async function refreshUpdateStatus({ silent = false } = {}) {
-  // Show "Checking…" only when we have nothing better to show. Otherwise the
-  // cached/previous status stays visible while we refresh in the background.
+function renderAppUpdateStatus(s) {
+  $("#app-current").textContent = s.current || t("settings.update.unknown");
+  $("#app-latest").textContent = s.latest || t("settings.update.unknown");
+  const badge = $("#app-update-badge");
+  const openBtn = $("#open-app-release-btn");
+  if (s.update_available) {
+    badge.className = "badge warn";
+    badge.textContent = t("settings.update.available");
+    openBtn.hidden = false;
+  } else if (s.latest) {
+    badge.className = "badge ok";
+    badge.textContent = t("settings.update.upToDate");
+    openBtn.hidden = true;
+  } else {
+    badge.className = "badge";
+    badge.textContent = t("settings.update.checkFailed");
+    openBtn.hidden = true;
+  }
+}
+
+async function refreshAllUpdates({ silent = false } = {}) {
   if (!silent) {
-    $("#update-badge").className = "badge";
-    $("#update-badge").textContent = t("settings.update.checking");
+    for (const id of ["#update-badge", "#app-update-badge"]) {
+      $(id).className = "badge";
+      $(id).textContent = t("settings.update.checking");
+    }
   }
   try {
-    const s = await invoke("check_for_update");
-    renderUpdateStatus(s);
+    const both = await invoke("check_all_updates");
+    renderUpdateStatus(both.client);
+    renderAppUpdateStatus(both.app);
   } catch (e) {
     $("#update-badge").className = "badge err";
     $("#update-badge").textContent = t("settings.update.checkFailed");
-    if (!silent) {
-      $("#update-current").textContent = "?";
-      $("#update-latest").textContent = "?";
-    }
+    $("#app-update-badge").className = "badge err";
+    $("#app-update-badge").textContent = t("settings.update.checkFailed");
     if (!silent) {
       toast(t("toast.updateCheckErr", { err: describeError(e) }), "error");
     }
   }
 }
 
-$("#check-update-btn")?.addEventListener("click", () => refreshUpdateStatus({ silent: false }));
+$("#check-update-btn")?.addEventListener("click", () => refreshAllUpdates({ silent: false }));
+$("#open-app-release-btn")?.addEventListener("click", async () => {
+  try {
+    await invoke("open_app_release_page");
+  } catch (e) {
+    toast(t("toast.error", { err: describeError(e) }), "error");
+  }
+});
 $("#install-update-btn")?.addEventListener("click", async () => {
   $("#install-update-btn").disabled = true;
   $("#update-progress-line").hidden = false;
@@ -637,6 +666,10 @@ listen("update://status", evt => {
   if (status.needs_initial_install) {
     showSetup();
   }
+});
+
+listen("update://app-status", evt => {
+  renderAppUpdateStatus(evt.payload || {});
 });
 
 listen("update://installed", evt => {
@@ -879,27 +912,51 @@ function setupLanguageSwitcher(names) {
   await refreshBinaryInfo();
   await refreshElevation();
 
-  // First-launch detection: if there's no client binary anywhere, show the
-  // setup overlay until the Rust-side auto-updater finishes the initial download.
-  // Otherwise we just refresh the cached status badge silently in the background.
-  let hadCached = false;
+  // Update-status flow:
+  //  1. If there's a cached status from a previous launch, render it now.
+  //  2. The Rust-side `auto_update_check` task is already running in the
+  //     background; it emits `update://status` once the network fetch completes
+  //     and the listener at the top of this file picks it up.
+  //  3. Safety net: if no event arrives within 15 s, mark the badge as
+  //     "Could not check" so the user isn't stuck on a spinner.
+  //
+  // We intentionally do NOT call `refreshUpdateStatus()` here — that would
+  // fire a second `check_for_update` HTTP request in parallel with the
+  // auto-update task and, on Linux first-launch, race the ~10 MB client
+  // download (which can make the badge appear to hang).
   let needsSetup = false;
   try {
     const info = await invoke("binary_info");
     if (info && info.exists === false) {
-      // Double-check via cached status — maybe an install just happened on disk.
-      const cached = await invoke("cached_update_status");
-      needsSetup = !(cached && cached.installed_path);
+      const cachedForSetup = await invoke("cached_update_status");
+      needsSetup = !(cachedForSetup && cachedForSetup.installed_path);
     }
     const cached = await invoke("cached_update_status");
-    if (cached) {
-      renderUpdateStatus(cached);
-      hadCached = true;
-    }
+    if (cached) renderUpdateStatus(cached);
+  } catch (_) {}
+
+  // Render the GUI's own version immediately (no network needed for "current"),
+  // and the cached "latest" comparison if we have one from a previous launch.
+  try {
+    const current = await invoke("app_version");
+    $("#app-current").textContent = current;
+  } catch (_) {}
+  try {
+    const cachedApp = await invoke("cached_app_update_status");
+    if (cachedApp) renderAppUpdateStatus(cachedApp);
   } catch (_) {}
 
   if (needsSetup) showSetup();
-  refreshUpdateStatus({ silent: hadCached });
+
+  setTimeout(() => {
+    for (const id of ["#update-badge", "#app-update-badge"]) {
+      const badge = $(id);
+      if (badge && badge.textContent === t("settings.update.checking")) {
+        badge.className = "badge err";
+        badge.textContent = t("settings.update.checkFailed");
+      }
+    }
+  }, 15000);
 
   // If after 12 seconds we still haven't seen the binary, show the error
   // overlay with a retry button. The auto-update task will still keep running
@@ -915,15 +972,4 @@ function setupLanguageSwitcher(names) {
     }, 12000);
   }
 
-  // Restore the last opened tab.
-  try {
-    const settings = await invoke("get_settings");
-    if (settings && settings.last_tab) {
-      const valid = ["home", "profiles", "settings", "logs"];
-      if (valid.includes(settings.last_tab)) {
-        // Switch without re-persisting (setTab does persist, but the same value is a no-op).
-        setTab(settings.last_tab);
-      }
-    }
-  } catch (_) {}
 })();

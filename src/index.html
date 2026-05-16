@@ -124,15 +124,29 @@
 
             <div class="setting-card">
               <div class="setting-head">
-                <h3 data-i18n="settings.update.title">Обновление клиента</h3>
-                <p><span data-i18n="settings.update.current">Установленная версия:</span> <code id="update-current">…</code></p>
-                <p><span data-i18n="settings.update.latest">Последняя на GitHub:</span> <code id="update-latest">…</code></p>
+                <h3 data-i18n="settings.update.title">Обновления</h3>
+                <div class="update-rows">
+                  <div class="update-row">
+                    <div class="update-row-label" data-i18n="settings.update.appRow">Приложение</div>
+                    <code class="update-row-current" id="app-current">…</code>
+                    <span class="update-row-arrow">→</span>
+                    <code class="update-row-latest" id="app-latest">—</code>
+                    <span class="badge" id="app-update-badge" data-i18n="settings.update.checking">Проверка…</span>
+                    <button class="btn" id="open-app-release-btn" hidden data-i18n="settings.update.openRelease">Открыть страницу релиза</button>
+                  </div>
+                  <div class="update-row">
+                    <div class="update-row-label" data-i18n="settings.update.clientRow">VPN-клиент</div>
+                    <code class="update-row-current" id="update-current">…</code>
+                    <span class="update-row-arrow">→</span>
+                    <code class="update-row-latest" id="update-latest">—</code>
+                    <span class="badge" id="update-badge" data-i18n="settings.update.checking">Проверка…</span>
+                    <button class="btn" id="install-update-btn" hidden data-i18n="settings.update.install">Установить</button>
+                  </div>
+                </div>
                 <p id="update-progress-line" hidden><span data-i18n="settings.update.downloading">Скачивание:</span> <span id="update-progress-text">0%</span></p>
               </div>
               <div class="setting-controls">
-                <span class="badge" id="update-badge" data-i18n="settings.update.checking">Проверка…</span>
-                <button class="btn primary" id="check-update-btn" data-i18n="settings.update.check">Проверить</button>
-                <button class="btn" id="install-update-btn" hidden data-i18n="settings.update.install">Установить обновление</button>
+                <button class="btn primary" id="check-update-btn" data-i18n="settings.update.check">Проверить обновления</button>
               </div>
             </div>
 

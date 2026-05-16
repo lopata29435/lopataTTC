@@ -40,6 +40,10 @@ flate2 = "1"
 tar = "0.4"
 futures-util = "0.3"
 semver = "1"
+shlex = "1"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = [

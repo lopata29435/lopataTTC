@@ -7,7 +7,39 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Fail-fast gate: the git tag, src-tauri/Cargo.toml `version`, and root
+  # package.json `version` must all agree before we burn CI minutes building
+  # six platforms. Skipped on manual `workflow_dispatch` runs because there's
+  # no tag in that case.
+  verify-versions:
+    name: Verify version consistency
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compare tag / Cargo.toml / package.json
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          TAG_VERSION="${TAG#v}"
+          CARGO_VERSION=$(sed -nE 's/^version[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' src-tauri/Cargo.toml | head -n1)
+          PKG_VERSION=$(python3 -c "import json,sys; print(json.load(open('package.json'))['version'])")
+
+          echo "tag        : $TAG_VERSION"
+          echo "Cargo.toml : $CARGO_VERSION"
+          echo "package.json: $PKG_VERSION"
+
+          if [ "$TAG_VERSION" != "$CARGO_VERSION" ] || [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Versions are out of sync. Bump src-tauri/Cargo.toml and package.json to '$TAG_VERSION' before tagging."
+            exit 1
+          fi
+
   build:
+    # Depend on the version check when this run was triggered by a tag push.
+    # `needs` lists the job; if it was skipped (manual dispatch) the build still
+    # runs thanks to the `always()` + dependency-success guard.
+    needs: verify-versions
+    if: always() && (needs.verify-versions.result == 'success' || needs.verify-versions.result == 'skipped')
     permissions:
       contents: write
     name: ${{ matrix.label }}
@@ -92,7 +124,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev libssl-dev libgtk-3-dev \
-            libayatana-appindicator3-dev librsvg2-dev patchelf
+            libayatana-appindicator3-dev librsvg2-dev patchelf \
+            xdg-utils
 
       # NOTE: The TrustTunnel client binary is intentionally NOT bundled into the
       # installer. The GUI downloads the latest release of

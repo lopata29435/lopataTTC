@@ -12,9 +12,13 @@ pub struct Settings {
     pub language: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_tab: Option<String>,
-    /// Что мы знаем о последнем результате update-check (чтобы UI не висел в "Checking…").
+    /// Что мы знаем о последнем результате update-check для VPN-клиента
+    /// (чтобы UI не висел в "Checking…").
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_known_update: Option<serde_json::Value>,
+    /// То же самое, но для самой GUI-программы (релиз с github lopata29435/lopataTTC).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_known_app_update: Option<serde_json::Value>,
 }
 
 pub struct SettingsStore {
@@ -53,6 +57,9 @@ impl SettingsStore {
         }
         if patch.last_known_update.is_some() {
             s.last_known_update = patch.last_known_update;
+        }
+        if patch.last_known_app_update.is_some() {
+            s.last_known_app_update = patch.last_known_app_update;
         }
         let snapshot = s.clone();
         drop(s);

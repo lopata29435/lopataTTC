@@ -781,6 +781,35 @@ textarea { resize: vertical; font-family: 'Cascadia Mono', 'Consolas', monospace
   to { opacity: 0; transform: translateX(20px); }
 }
 
+/* ===== Update rows in Settings ===== */
+.update-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+}
+.update-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+.update-row-label {
+  min-width: 120px;
+  color: var(--text-dim);
+}
+.update-row-current,
+.update-row-latest {
+  background: var(--bg-2);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.update-row-arrow {
+  color: var(--text-mute);
+}
+
 /* ===== First-launch setup overlay ===== */
 .setup-overlay {
   position: fixed;
