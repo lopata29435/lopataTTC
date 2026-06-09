@@ -358,13 +358,66 @@ fn resolve_binary_path(
     app_data_dir.join(bin_name)
 }
 
-fn build_tray(app: &AppHandle) -> tauri::Result<()> {
-    let show = MenuItem::with_id(app, "show", "Открыть", true, None::<&str>)?;
-    let connect = MenuItem::with_id(app, "connect", "Подключить", true, None::<&str>)?;
-    let disconnect = MenuItem::with_id(app, "disconnect", "Отключить", true, None::<&str>)?;
+struct TrayTexts {
+    show: &'static str,
+    connect: &'static str,
+    disconnect: &'static str,
+    quit: &'static str,
+}
+
+fn tray_texts(lang: &str) -> TrayTexts {
+    match lang {
+        "ru" => TrayTexts {
+            show: "Открыть",
+            connect: "Подключить",
+            disconnect: "Отключить",
+            quit: "Выход",
+        },
+        _ => TrayTexts {
+            show: "Open",
+            connect: "Connect",
+            disconnect: "Disconnect",
+            quit: "Quit",
+        },
+    }
+}
+
+/// Tray language: explicit user setting if present, otherwise the system
+/// locale (mirrors the frontend default in i18n.js: ru-* → ru, else en).
+fn tray_lang(app: &AppHandle) -> String {
+    let state: tauri::State<AppState> = app.state();
+    if let Some(lang) = state.settings.get().language {
+        return lang;
+    }
+    let sys = sys_locale::get_locale().unwrap_or_default().to_lowercase();
+    if sys.starts_with("ru") {
+        "ru".into()
+    } else {
+        "en".into()
+    }
+}
+
+fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
+    let texts = tray_texts(&tray_lang(app));
+    let show = MenuItem::with_id(app, "show", texts.show, true, None::<&str>)?;
+    let connect = MenuItem::with_id(app, "connect", texts.connect, true, None::<&str>)?;
+    let disconnect = MenuItem::with_id(app, "disconnect", texts.disconnect, true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
-    let quit = MenuItem::with_id(app, "quit", "Выход", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show, &connect, &disconnect, &separator, &quit])?;
+    let quit = MenuItem::with_id(app, "quit", texts.quit, true, None::<&str>)?;
+    Menu::with_items(app, &[&show, &connect, &disconnect, &separator, &quit])
+}
+
+/// Re-apply tray menu texts after the UI language changed.
+pub fn rebuild_tray_menu(app: &AppHandle) {
+    if let Some(tray) = app.tray_by_id("main") {
+        if let Ok(menu) = build_tray_menu(app) {
+            let _ = tray.set_menu(Some(menu));
+        }
+    }
+}
+
+fn build_tray(app: &AppHandle) -> tauri::Result<()> {
+    let menu = build_tray_menu(app)?;
 
     let icon = app
         .default_window_icon()

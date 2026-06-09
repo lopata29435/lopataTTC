@@ -382,10 +382,16 @@ pub fn get_settings(state: State<AppState>) -> crate::settings::Settings {
 
 #[tauri::command]
 pub fn update_settings(
+    app: AppHandle,
     state: State<AppState>,
     patch: crate::settings::Settings,
 ) -> Result<crate::settings::Settings, String> {
-    state.settings.patch(patch).map_err(|e| e.to_string())
+    let language_changed = patch.language.is_some();
+    let result = state.settings.patch(patch).map_err(|e| e.to_string())?;
+    if language_changed {
+        crate::rebuild_tray_menu(&app);
+    }
+    Ok(result)
 }
 
 #[tauri::command]

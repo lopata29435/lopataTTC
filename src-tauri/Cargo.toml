@@ -43,6 +43,7 @@ tar = "0.4"
 futures-util = "0.3"
 semver = "1"
 shlex = "1"
+sys-locale = "0.3"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
