@@ -6,6 +6,12 @@ on:
       - 'v*'
   workflow_dispatch:
 
+# tauri-action creates the GitHub release and uploads assets — the workflow
+# token needs contents:write everywhere (job-level grants alone proved
+# insufficient with the repo's previous "read" default).
+permissions:
+  contents: write
+
 jobs:
   # Fail-fast gate: the git tag, src-tauri/Cargo.toml `version`, and root
   # package.json `version` must all agree before we burn CI minutes building
