@@ -550,8 +550,11 @@ async function refreshBinaryInfo() {
 
 async function refreshElevation() {
   try {
+    const platform = await invoke("platform_info");
     const elevated = await invoke("is_elevated");
-    $("#elevation-warning").hidden = elevated;
+    // The banner is Windows-only: on Linux/macOS the GUI deliberately runs
+    // unprivileged and the system asks for the admin password at connect time.
+    $("#elevation-warning").hidden = !platform.is_windows || elevated;
   } catch (_) {}
 }
 
@@ -583,18 +586,22 @@ function renderAppUpdateStatus(s) {
   $("#app-current").textContent = s.current || t("settings.update.unknown");
   $("#app-latest").textContent = s.latest || t("settings.update.unknown");
   const badge = $("#app-update-badge");
+  const installBtn = $("#install-app-update-btn");
   const openBtn = $("#open-app-release-btn");
   if (s.update_available) {
     badge.className = "badge warn";
     badge.textContent = t("settings.update.available");
+    installBtn.hidden = false;
     openBtn.hidden = false;
   } else if (s.latest) {
     badge.className = "badge ok";
     badge.textContent = t("settings.update.upToDate");
+    installBtn.hidden = true;
     openBtn.hidden = true;
   } else {
     badge.className = "badge";
     badge.textContent = t("settings.update.checkFailed");
+    installBtn.hidden = true;
     openBtn.hidden = true;
   }
 }
@@ -627,6 +634,36 @@ $("#open-app-release-btn")?.addEventListener("click", async () => {
     await invoke("open_app_release_page");
   } catch (e) {
     toast(t("toast.error", { err: describeError(e) }), "error");
+  }
+});
+
+$("#install-app-update-btn")?.addEventListener("click", async () => {
+  const btn = $("#install-app-update-btn");
+  const badge = $("#app-update-badge");
+  btn.disabled = true;
+  const originalBadge = badge.textContent;
+  badge.textContent = t("settings.update.downloading") + " 0%";
+  try {
+    await invoke("install_app_update");
+    // app.restart() is called from Rust on success — we don't reach here normally.
+  } catch (e) {
+    badge.textContent = originalBadge;
+    // tauri-plugin-updater will fail if signing isn't configured yet. In that
+    // case point the user at the release page so they can install manually.
+    toast(t("toast.updateInstallErr", { err: describeError(e) }), "error");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+listen("app-update://progress", evt => {
+  const { done, total } = evt.payload || {};
+  const badge = $("#app-update-badge");
+  if (total) {
+    const pct = Math.floor((done / total) * 100);
+    badge.textContent = t("settings.update.downloading") + ` ${pct}%`;
+  } else {
+    badge.textContent = t("settings.update.downloading") + ` ${formatBytes(done)}`;
   }
 });
 $("#install-update-btn")?.addEventListener("click", async () => {

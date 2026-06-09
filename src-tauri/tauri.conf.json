@@ -1,7 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "TrustTunnel",
-  "version": "0.1.0",
   "identifier": "org.trusttunnel.gui",
   "build": {
     "frontendDist": "../src"
@@ -34,6 +33,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -54,6 +54,15 @@
     "deep-link": {
       "desktop": {
         "schemes": ["tt"]
+      }
+    },
+    "updater": {
+      "endpoints": [
+        "https://github.com/lopata29435/lopataTTC/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQwNUE5M0ZCQTcyMkU5N0EKUldSNjZTS24rNU5hUUVKRTNHRklRZ0V2aG4xb0hmcHF1Z1ZjbktINDlhMjhmQmJQajR1VzJRemEK",
+      "windows": {
+        "installMode": "passive"
       }
     }
   }

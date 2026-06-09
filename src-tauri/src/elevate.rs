@@ -50,14 +50,20 @@ pub fn run_elevated(exe: &Path, args: &str, working_dir: Option<&Path>) -> Resul
 /// if it wanted to "restart as admin".
 #[cfg(target_os = "linux")]
 pub fn run_elevated(exe: &Path, args: &str, working_dir: Option<&Path>) -> Result<()> {
-    use std::os::unix::process::CommandExt;
     use std::process::{Command, Stdio};
 
-    let mut cmd = Command::new("pkexec");
-    // pkexec resets the environment to a tiny safe-list by default. We have
-    // to re-inject DISPLAY / WAYLAND_DISPLAY / XAUTHORITY / XDG_RUNTIME_DIR so
-    // the elevated binary can actually connect to the user's GUI session.
-    // (`env` is a tiny POSIX utility that sets env vars then execs the next arg.)
+    // We use `setsid -f` (util-linux) as the outer wrapper: it forks once and
+    // creates a new session for the child. The resulting pkexec process is fully
+    // detached from us — even if our process exits during the password prompt,
+    // pkexec stays alive long enough to finish authentication and exec the
+    // elevated binary.
+    let mut cmd = Command::new("setsid");
+    cmd.arg("-f").arg("pkexec");
+
+    // pkexec resets the environment to a tiny safe-list by default. Re-inject
+    // the variables the elevated binary needs to connect to the user's GUI
+    // session (DISPLAY for X11, WAYLAND_DISPLAY for Wayland, etc.) via the
+    // POSIX `env` utility.
     cmd.arg("env");
     for var in [
         "DISPLAY",
@@ -83,19 +89,17 @@ pub fn run_elevated(exe: &Path, args: &str, working_dir: Option<&Path>) -> Resul
     if let Some(dir) = working_dir {
         cmd.current_dir(dir);
     }
-    // Detach: new session means our SIGHUP on exit won't kill the child.
-    unsafe {
-        cmd.pre_exec(|| {
-            libc::setsid();
-            Ok(())
-        });
-    }
+    // Don't tie pkexec's I/O to our (possibly soon-to-die) terminal.
     cmd.stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
 
-    cmd.spawn()
-        .map_err(|e| anyhow!("pkexec spawn failed: {} — установлен ли pkexec/PolicyKit?", e))?;
+    cmd.spawn().map_err(|e| {
+        anyhow!(
+            "setsid/pkexec spawn failed: {}. Установлены ли util-linux + pkexec/PolicyKit?",
+            e
+        )
+    })?;
     Ok(())
 }
 

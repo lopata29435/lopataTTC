@@ -1,10 +1,8 @@
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 
-const GH_API_LATEST: &str =
-    "https://api.github.com/repos/lopata29435/lopataTTC/releases/latest";
-const GH_RELEASES_FALLBACK: &str =
-    "https://github.com/lopata29435/lopataTTC/releases/latest";
+const GH_API_LATEST: &str = "https://api.github.com/repos/lopata29435/lopataTTC/releases/latest";
+const GH_RELEASES_FALLBACK: &str = "https://github.com/lopata29435/lopataTTC/releases/latest";
 const USER_AGENT: &str = "TrustTunnel-GUI/0.1";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

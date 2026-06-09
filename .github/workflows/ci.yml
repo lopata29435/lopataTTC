@@ -37,12 +37,10 @@ jobs:
       - name: Cargo fmt
         working-directory: src-tauri
         run: cargo fmt -- --check
-        continue-on-error: true
 
       - name: Cargo clippy
         working-directory: src-tauri
         run: cargo clippy --no-deps -- -D warnings
-        continue-on-error: true
 
       - name: Cargo check
         working-directory: src-tauri

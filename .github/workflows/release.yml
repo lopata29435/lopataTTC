@@ -34,6 +34,14 @@ jobs:
             exit 1
           fi
 
+          # tauri.conf.json must NOT carry its own "version" — Cargo.toml is
+          # the single source of truth (a stale value here once shipped a
+          # v0.1.1 release whose artifacts were all versioned 0.1.0).
+          if python3 -c "import json,sys; sys.exit(0 if 'version' in json.load(open('src-tauri/tauri.conf.json')) else 1)"; then
+            echo "::error::src-tauri/tauri.conf.json contains a 'version' key. Remove it — the version comes from Cargo.toml."
+            exit 1
+          fi
+
   build:
     # Depend on the version check when this run was triggered by a tag push.
     # `needs` lists the job; if it was skipped (manual dispatch) the build still
@@ -141,6 +149,13 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Set these GitHub Secrets to enable signed in-app updates.
+          # Generate the keypair once with `cargo tauri signer generate -w ~/.tauri/myapp.key`
+          # then put the contents of myapp.key (base64 blob) into TAURI_SIGNING_PRIVATE_KEY
+          # and the password (if any) into TAURI_SIGNING_PRIVATE_KEY_PASSWORD.
+          # The matching public key goes into tauri.conf.json -> plugins.updater.pubkey.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'TrustTunnel GUI ${{ github.ref_name }}'
@@ -154,4 +169,37 @@ jobs:
             при первом запуске, если в системе нет новой версии.
           releaseDraft: true
           prerelease: false
+          includeUpdaterJson: true
           args: ${{ matrix.tauri_args }}
+
+  # Publish the draft once every platform finished uploading. Without this the
+  # release stays draft forever and the in-app updater endpoint
+  # (/releases/latest/download/latest.json) returns 404 — i.e. no auto-updates.
+  publish:
+    name: Publish release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Verify updater manifest and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          ASSETS=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')
+          echo "Release assets:"
+          echo "$ASSETS"
+
+          if ! echo "$ASSETS" | grep -qx 'latest.json'; then
+            echo "::error::latest.json is missing from the release — updater signing/manifest generation failed. Not publishing."
+            exit 1
+          fi
+          if ! echo "$ASSETS" | grep -q '\.sig$'; then
+            echo "::error::No .sig files in the release — TAURI_SIGNING_PRIVATE_KEY is missing or invalid. Not publishing."
+            exit 1
+          fi
+
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+          echo "Release $TAG published."

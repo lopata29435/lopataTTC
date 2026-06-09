@@ -205,20 +205,31 @@ pub fn platform_info() -> serde_json::Value {
     })
 }
 
+/// Windows-only: relaunch the whole GUI elevated. On Linux/macOS the GUI
+/// stays unprivileged by design — only the VPN client child is elevated
+/// (see vpn.rs), because a WebKit GUI running as root crashes on most distros.
 #[tauri::command]
 pub fn restart_as_admin(app: AppHandle) -> Result<(), String> {
-    use crate::elevate;
-    if elevate::is_elevated() {
-        return Ok(());
+    #[cfg(windows)]
+    {
+        use crate::elevate;
+        if elevate::is_elevated() {
+            return Ok(());
+        }
+        let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+        elevate::run_elevated(&exe, "", exe.parent()).map_err(|e| e.to_string())?;
+        // Give the new instance a moment to start before exiting.
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(400));
+            app.exit(0);
+        });
+        Ok(())
     }
-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    elevate::run_elevated(&exe, "", exe.parent()).map_err(|e| e.to_string())?;
-    // Give the new instance a moment to start before exiting.
-    std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_millis(400));
-        app.exit(0);
-    });
-    Ok(())
+    #[cfg(not(windows))]
+    {
+        let _ = app;
+        Err("Не требуется: на этой платформе права запрашиваются при подключении".into())
+    }
 }
 
 #[tauri::command]
@@ -276,10 +287,8 @@ pub async fn check_all_updates(state: State<'_, AppState>) -> Result<AllUpdatesS
     let settings_store = state.settings.clone();
 
     // Run both fetches concurrently.
-    let (client_release, app_status) = tokio::join!(
-        updater::fetch_latest_release(),
-        app_updater::fetch_latest(),
-    );
+    let (client_release, app_status) =
+        tokio::join!(updater::fetch_latest_release(), app_updater::fetch_latest(),);
 
     let client = client_release
         .map(|rel| updater::build_status(&app_data_dir, None, Some(&rel)))
@@ -306,11 +315,51 @@ pub fn app_version() -> String {
     app_updater::current_version()
 }
 
+/// Auto-install the latest GUI version via tauri-plugin-updater.
+///
+/// Requires `plugins.updater.pubkey` in tauri.conf.json to be a valid Ed25519
+/// public key, and the CI build to have been signed with the matching private
+/// key (via `TAURI_SIGNING_PRIVATE_KEY` env var). If signing isn't configured,
+/// this command returns an error and the frontend falls back to opening the
+/// GitHub release page.
 #[tauri::command]
-pub fn open_app_release_page(
-    app: AppHandle,
-    state: State<AppState>,
-) -> Result<(), String> {
+pub async fn install_app_update(app: AppHandle) -> Result<bool, String> {
+    use tauri_plugin_updater::UpdaterExt;
+    let updater = app.updater().map_err(|e| e.to_string())?;
+    let update = match updater.check().await {
+        Ok(Some(u)) => u,
+        Ok(None) => return Ok(false), // already up-to-date
+        Err(e) => return Err(format!("Проверка обновлений: {}", e)),
+    };
+
+    // Stream progress events to the frontend.
+    let app_for_progress = app.clone();
+    let mut total_downloaded: u64 = 0;
+    update
+        .download_and_install(
+            move |chunk_length, content_length| {
+                total_downloaded += chunk_length as u64;
+                let _ = app_for_progress.emit(
+                    "app-update://progress",
+                    serde_json::json!({
+                        "done": total_downloaded,
+                        "total": content_length,
+                    }),
+                );
+            },
+            move || {
+                // download finished, install starting
+            },
+        )
+        .await
+        .map_err(|e| format!("Установка: {}", e))?;
+
+    // Restart the app — the new binary will start.
+    app.restart();
+}
+
+#[tauri::command]
+pub fn open_app_release_page(app: AppHandle, state: State<AppState>) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
     // Prefer the cached release URL (specific version page) if available;
     // otherwise the generic /releases/latest page.

@@ -33,6 +33,13 @@ pub struct AppState {
 /// Entry point invoked by main.rs (and by tauri::Builder on mobile in the future).
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // NOTE on privileges:
+    //  * Windows — the whole GUI runs elevated (requireAdministrator in
+    //    app.manifest), the VPN child inherits admin.
+    //  * Linux/macOS — the GUI deliberately stays unprivileged. Running a
+    //    WebKit GUI as root is unsupported (WebKitGTK crashes under root on
+    //    most distros). Only the client process is elevated, via
+    //    pkexec/osascript at connect time — see vpn.rs.
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             // A second instance was launched. If args contain a tt:// URI,
@@ -54,6 +61,8 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             // Resolve app data dir. We override Tauri's default (which uses the
             // dotted identifier and produces folder names like `org.trusttunnel.gui`)
@@ -140,24 +149,6 @@ pub fn run() {
                 }
             });
 
-            // First-run bootstrap: if there are no profiles but a known seed file exists
-            // (the one the user already has at F:\programs\TrustTunnel\conf.toml), import it.
-            let state_handle: tauri::State<AppState> = app.state();
-            if state_handle.profiles.list().is_empty() {
-                let candidates = [
-                    PathBuf::from(r"F:\programs\TrustTunnel\conf.toml"),
-                    PathBuf::from(r"F:\programs\TrustTunnel\trusttunnel_client.toml"),
-                ];
-                for path in candidates {
-                    if path.exists() {
-                        if let Ok(profile) = state_handle.profiles.import_toml_file(&path) {
-                            state_handle.profiles.set_active(Some(profile.id)).ok();
-                            break;
-                        }
-                    }
-                }
-            }
-
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -168,6 +159,7 @@ pub fn run() {
             commands::cached_app_update_status,
             commands::app_version,
             commands::open_app_release_page,
+            commands::install_app_update,
             commands::get_settings,
             commands::update_settings,
             commands::list_profiles,
