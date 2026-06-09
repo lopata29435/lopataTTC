@@ -48,12 +48,38 @@ jobs:
             exit 1
           fi
 
+  # Create the draft release up-front. tauri-action can create it too, but
+  # release creation by GITHUB_TOKEN fails with "Resource not accessible by
+  # integration" when the tag no longer points at the branch head (a known
+  # GitHub limitation). Right after the tag push that's almost never the case,
+  # and the build jobs then only *upload* into the existing draft.
+  create-draft:
+    name: Create draft release
+    needs: verify-versions
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create draft if it does not exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG already exists — skipping creation."
+            exit 0
+          fi
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft \
+            --title "TrustTunnel GUI $TAG" \
+            --notes "Автоматический релиз. Установщики: Windows (.msi / .exe), macOS (.dmg), Linux (.AppImage / .deb / .rpm). VPN-клиент trusttunnel_client подкачивается автоматически при первом запуске."
+
   build:
     # Depend on the version check when this run was triggered by a tag push.
-    # `needs` lists the job; if it was skipped (manual dispatch) the build still
-    # runs thanks to the `always()` + dependency-success guard.
-    needs: verify-versions
-    if: always() && (needs.verify-versions.result == 'success' || needs.verify-versions.result == 'skipped')
+    # `needs` lists the jobs; if they were skipped (manual dispatch) the build
+    # still runs thanks to the `always()` + dependency-success guard.
+    needs: [verify-versions, create-draft]
+    if: always() && (needs.verify-versions.result == 'success' || needs.verify-versions.result == 'skipped') && (needs.create-draft.result == 'success' || needs.create-draft.result == 'skipped')
     permissions:
       contents: write
     name: ${{ matrix.label }}
