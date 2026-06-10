@@ -70,9 +70,37 @@ jobs:
             echo "Release $TAG already exists — skipping creation."
             exit 0
           fi
+
+          # Human-friendly download guide. Asset names are predictable from the
+          # version, so we can link them before the builds upload anything.
+          VER="${TAG#v}"
+          BASE="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG"
+          cat > notes.md <<EOF
+          ## 📥 Какой файл мне скачать?
+
+          | Ваша система | Скачать |
+          |---|---|
+          | **Windows 10/11** (обычный ПК — самый частый случай) | **[TrustTunnel_${VER}_x64-setup.exe]($BASE/TrustTunnel_${VER}_x64-setup.exe)** |
+          | Windows на ARM (Surface Pro X и т.п.) | [TrustTunnel_${VER}_arm64-setup.exe]($BASE/TrustTunnel_${VER}_arm64-setup.exe) |
+          | Windows 32-bit (очень старые ПК) | [TrustTunnel_${VER}_x86-setup.exe]($BASE/TrustTunnel_${VER}_x86-setup.exe) |
+          | **macOS** (Intel и Apple Silicon) | [TrustTunnel_${VER}_universal.dmg]($BASE/TrustTunnel_${VER}_universal.dmg) |
+          | **Ubuntu / Debian / Mint** | [TrustTunnel_${VER}_amd64.deb]($BASE/TrustTunnel_${VER}_amd64.deb) |
+          | Fedora / openSUSE | [TrustTunnel-${VER}-1.x86_64.rpm]($BASE/TrustTunnel-${VER}-1.x86_64.rpm) |
+          | Любой Linux (без установки) | [TrustTunnel_${VER}_amd64.AppImage]($BASE/TrustTunnel_${VER}_amd64.AppImage) |
+          | Linux ARM64 (Raspberry Pi 4/5 и т.п.) | [.deb]($BASE/TrustTunnel_${VER}_arm64.deb) · [.rpm]($BASE/TrustTunnel-${VER}-1.aarch64.rpm) · [.AppImage]($BASE/TrustTunnel_${VER}_aarch64.AppImage) |
+
+          <details>
+          <summary>Что за остальные файлы?</summary>
+
+          \`.msi\` — те же установщики Windows в формате Windows Installer (для корпоративного развёртывания); \`.sig\` и \`latest.json\` — служебные файлы системы автообновления, скачивать их не нужно.
+          </details>
+
+          VPN-клиент \`trusttunnel_client\` скачается автоматически при первом запуске. Установленное приложение обновляется само при выходе новых версий.
+          EOF
+
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft \
             --title "TrustTunnel GUI $TAG" \
-            --notes "Автоматический релиз. Установщики: Windows (.msi / .exe), macOS (.dmg), Linux (.AppImage / .deb / .rpm). VPN-клиент trusttunnel_client подкачивается автоматически при первом запуске."
+            --notes-file notes.md
 
   build:
     # Depend on the version check when this run was triggered by a tag push.
@@ -191,14 +219,8 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'TrustTunnel GUI ${{ github.ref_name }}'
-          releaseBody: |
-            Автоматический релиз. Установщики:
-            - Windows: `.msi` / `.exe` (NSIS)
-            - macOS: `.dmg`
-            - Linux: `.AppImage` / `.deb` / `.rpm`
-
-            Встроенный `trusttunnel_client` подкачивается из релизов TrustTunnel автоматически
-            при первом запуске, если в системе нет новой версии.
+          # No releaseBody here: the create-draft job already wrote the
+          # download guide and we don't want it overwritten.
           releaseDraft: true
           prerelease: false
           includeUpdaterJson: true
