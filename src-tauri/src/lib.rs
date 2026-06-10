@@ -2,12 +2,15 @@ pub mod app_updater;
 pub mod commands;
 pub mod deeplink;
 pub mod elevate;
+pub mod logging;
 pub mod profiles;
 pub mod service;
 pub mod settings;
 pub mod uninstall;
 pub mod updater;
 pub mod vpn;
+
+use crate::logging::log;
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -44,13 +47,45 @@ pub fn run() {
     //    WebKit GUI as root is unsupported (WebKitGTK crashes under root on
     //    most distros). Only the client process is elevated, via
     //    pkexec/osascript at connect time — see vpn.rs.
+
+    // Set up file logging + panic hook as the very first thing: the GUI has
+    // no console, so this is the only way to see why something died.
+    let log_dir = pick_app_data_dir().unwrap_or_else(std::env::temp_dir);
+    logging::init(&log_dir);
+    log(&format!(
+        "=== start v{} pid={} argv={:?}",
+        env!("CARGO_PKG_VERSION"),
+        std::process::id(),
+        std::env::args()
+            .map(|a| if a.starts_with("tt://") {
+                logging::redact_link(&a)
+            } else {
+                a
+            })
+            .collect::<Vec<_>>()
+    ));
+
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             // A second instance was launched. If args contain a tt:// URI,
             // forward it as a deep-link event. Then bring the existing window to the front.
+            log(&format!(
+                "single-instance: second instance argv={:?}",
+                argv.iter()
+                    .map(|a| if a.starts_with("tt://") {
+                        logging::redact_link(a)
+                    } else {
+                        a.clone()
+                    })
+                    .collect::<Vec<_>>()
+            ));
+            // IMPORTANT: emit under our OWN event name. Emitting as
+            // "deep-link://new-url" (the deep-link plugin's internal event)
+            // makes the plugin re-fire on_open_url, whose handler emits
+            // again — an infinite event storm that kills the app.
             for arg in argv.iter().skip(1) {
                 if arg.starts_with("tt://") {
-                    let _ = app.emit("deep-link://new-url", vec![arg.clone()]);
+                    let _ = app.emit("lopata://deeplink", vec![arg.clone()]);
                 }
             }
             if let Some(window) = app.get_webview_window("main") {
@@ -58,6 +93,7 @@ pub fn run() {
                 let _ = window.unminimize();
                 let _ = window.set_focus();
             }
+            log("single-instance: forwarded and focused");
         }))
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_shell::init())
@@ -122,7 +158,15 @@ pub fn run() {
                 let app_handle = app.handle().clone();
                 app.deep_link().on_open_url(move |event| {
                     let urls: Vec<String> = event.urls().iter().map(|u| u.to_string()).collect();
-                    let _ = app_handle.emit("deep-link://new-url", urls);
+                    log(&format!(
+                        "deep-link plugin: on_open_url x{} [{}]",
+                        urls.len(),
+                        urls.iter()
+                            .map(|u| logging::redact_link(u))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ));
+                    let _ = app_handle.emit("lopata://deeplink", urls);
                     if let Some(window) = app_handle.get_webview_window("main") {
                         let _ = window.show();
                         let _ = window.unminimize();

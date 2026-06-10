@@ -1,109 +1,75 @@
-# Lopata — клиент TrustTunnel
+# Lopata
 
-**Lopata** — кроссплатформенный десктопный клиент (GUI) для VPN-протокола
-[TrustTunnel](https://github.com/TrustTunnel/TrustTunnelClient): системный трей,
-профили серверов, импорт по `tt://`-ссылкам и `.toml`-конфигам, логи, killswitch
-и автообновления. Это независимый клиент; сам протокол и ядро — проект AdGuard.
+🇷🇺 [Читать по-русски](README.ru.md)
 
-Технологии: [Tauri 2](https://tauri.app) (Rust backend + WebView frontend, без Node-зависимостей).
+Cross-platform desktop client for the [TrustTunnel](https://github.com/TrustTunnel/TrustTunnelClient)
+VPN protocol. System tray, server profiles, `tt://` link import, logs, kill-switch,
+automatic updates. Built with [Tauri 2](https://tauri.app) (Rust + WebView).
 
-## Установка
+## Download
 
-Скачайте установщик для своей платформы со страницы
-[Releases](https://github.com/lopata29435/lopataTTC/releases/latest):
+Grab the installer from the [latest release](https://github.com/lopata29435/lopataTTC/releases/latest):
 
-| Платформа | Файл |
+| Your system | File |
 |---|---|
-| Windows x64 / x86 / ARM64 | `*-setup.exe` (NSIS) или `*.msi` |
-| macOS (Intel + Apple Silicon) | `*.dmg` |
-| Linux | `*.AppImage`, `*.deb`, `*.rpm` |
+| **Windows 10/11** | `Lopata_*_x64-setup.exe` |
+| Windows on ARM / 32-bit | `*_arm64-setup.exe` / `*_x86-setup.exe` |
+| **macOS** (Intel & Apple Silicon) | `Lopata_*_universal.dmg` |
+| **Ubuntu / Debian / Mint** | `*_amd64.deb` |
+| Fedora / openSUSE | `*.x86_64.rpm` |
+| Any Linux (portable) | `*_amd64.AppImage` |
 
-## Как это работает
+The `trusttunnel_client` core is downloaded automatically from the official
+upstream releases on first launch. Both the app and the core then keep
+themselves up to date.
 
-### Бинарник VPN-клиента
+## Usage
 
-Сам `trusttunnel_client` **не зашит в установщик**. При первом запуске GUI
-скачивает свежий релиз из [TrustTunnel/TrustTunnelClient](https://github.com/TrustTunnel/TrustTunnelClient/releases)
-в папку данных (`%APPDATA%\TrustTunnel\clients\` / `~/.config/TrustTunnel/clients/`)
-и дальше автоматически подкачивает новые версии в фоне при каждом запуске.
+1. Install and launch.
+2. Add a server: click a `tt://` link in the browser, paste one from the
+   clipboard, or import a client `.toml` config.
+3. Press **Connect**.
 
-### Автообновление самого GUI
+Administrator rights are required to create the TUN interface: Windows asks
+once at startup (UAC), Linux/macOS ask at connect time (pkexec / system dialog).
 
-При старте приложение проверяет последний релиз этого репозитория. Если вышла
-новая версия — в Настройках появляется кнопка «Установить»: обновление
-скачивается, проверяется Ed25519-подписью (tauri-plugin-updater) и ставится без
-ручного скачивания установщика. На Linux self-update работает для AppImage;
-для `.deb`/`.rpm` — кнопка «Открыть страницу релиза».
+### Profile options
 
-### Права администратора
+| Option | Values |
+|---|---|
+| Protocol | HTTP/2 (TCP) or HTTP/3 (QUIC) |
+| VPN mode | `general` (everything through VPN) or `selective` (listed domains only) |
+| Anti-DPI, kill-switch, post-quantum TLS | on/off |
+| Custom SNI, DNS upstreams, route exclusions | free-form |
 
-VPN-клиенту нужны права root/admin (TUN-интерфейс, маршруты, firewall):
-
-* **Windows** — приложение само запускается с повышением прав
-  (`requireAdministrator`), UAC-запрос при старте.
-* **Linux** — GUI работает **от обычного пользователя** (WebKitGTK под root не
-  работает). При нажатии «Подключиться» система показывает диалог PolicyKit
-  (`pkexec`) и с правами root запускается только сам клиент. Остановка —
-  через stop-файл, который отслеживает обёртка-скрипт.
-* **macOS** — аналогично, через системный диалог авторизации (`osascript`).
-
-## Сборка из исходников
-
-Требования: Rust (stable), на Linux — `libwebkit2gtk-4.1-dev libgtk-3-dev
-libayatana-appindicator3-dev librsvg2-dev` и т.д. (см. [ci.yml](.github/workflows/ci.yml)).
+## Build from source
 
 ```bash
 cargo install tauri-cli --locked
-cargo tauri dev      # запуск в dev-режиме
-cargo tauri build    # сборка установщиков
+cargo tauri dev     # run
+cargo tauri build   # produce installers
 ```
 
-Для оффлайн-разработки можно заранее положить клиент рядом:
-`scripts/fetch-client.sh` / `scripts/fetch-client.ps1`.
+Linux build deps: see [ci.yml](.github/workflows/ci.yml).
 
-## Выпуск релиза
+## Release
 
-1. Поднимите версию в **двух** файлах: `src-tauri/Cargo.toml` и `package.json`
-   (они должны совпадать; `tauri.conf.json` версию не содержит — это проверяет CI).
-2. Закоммитьте и создайте тег:
+Bump the version in `src-tauri/Cargo.toml` **and** `package.json`, then:
 
-   ```bash
-   git tag v0.2.0 && git push origin master --tags
-   ```
-
-3. GitHub Actions ([release.yml](.github/workflows/release.yml)):
-   * `verify-versions` — сверяет тег с версиями в файлах;
-   * `build` — собирает 6 платформ, подписывает апдейтер-артефакты
-     (`TAURI_SIGNING_PRIVATE_KEY` в Secrets) и заливает в draft-релиз
-     вместе с `latest.json`;
-   * `publish` — проверяет, что `latest.json` и `.sig` на месте, и публикует
-     релиз. С этого момента все установленные приложения увидят обновление.
-
-### Ключи подписи обновлений
-
-Публичный ключ зашит в `src-tauri/tauri.conf.json` (`plugins.updater.pubkey`),
-приватный — в GitHub Secrets (`TAURI_SIGNING_PRIVATE_KEY` +
-`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`). Если потеряете приватный ключ,
-сгенерируйте новую пару (`cargo tauri signer generate`) и обновите **оба**
-места — но уже установленные приложения перестанут принимать автообновления
-(пользователям придётся один раз поставить новую версию вручную).
-
-## Структура
-
-```
-src/                  — фронтенд (vanilla JS + CSS, без сборщика)
-src-tauri/src/
-  lib.rs              — bootstrap, трей, фоновая проверка обновлений
-  vpn.rs              — запуск/остановка клиента, elevation на Unix, логи
-  updater.rs          — автодокачка trusttunnel_client из upstream-релизов
-  app_updater.rs      — проверка новых версий самого GUI
-  profiles.rs         — хранилище профилей (JSON в папке данных)
-  deeplink.rs         — разбор tt://-ссылок
-  elevate.rs          — повышение прав (UAC / pkexec / osascript)
-  service.rs          — установка клиента как службы Windows (автостарт)
+```bash
+git tag vX.Y.Z && git push origin master --tags
 ```
 
-## Лицензия
+CI builds all platforms, signs the updater artifacts and publishes the release
+automatically.
 
-GUI — личный проект [@lopata29435](https://github.com/lopata29435).
-Upstream-клиент TrustTunnel — Apache 2.0, © AdGuard Software Ltd.
+## License
+
+Lopata is licensed under the [MIT License](LICENSE).
+
+Lopata is an independent third-party client and is **not affiliated with
+AdGuard**. The TrustTunnel protocol and the `trusttunnel_client` core are
+© AdGuard Software Ltd, licensed under Apache License 2.0. Lopata does not
+bundle or modify the core — it downloads unmodified official builds from the
+[upstream releases](https://github.com/TrustTunnel/TrustTunnelClient/releases)
+at first launch, which is permitted by the Apache 2.0 license.

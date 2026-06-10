@@ -929,7 +929,9 @@ async function importDeeplinkUri(u) {
   }
 }
 
-listen("deep-link://new-url", async evt => {
+// Custom event name — "deep-link://new-url" is the deep-link plugin's own
+// internal event; reusing it caused an infinite emit loop (see lib.rs).
+listen("lopata://deeplink", async evt => {
   const urls = evt.payload || [];
   for (const u of urls) await importDeeplinkUri(u);
 });

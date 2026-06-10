@@ -66,7 +66,18 @@ pub fn import_toml_file(state: State<AppState>, path: String) -> Result<Profile,
 
 #[tauri::command]
 pub fn import_deeplink(state: State<AppState>, uri: String) -> Result<Profile, String> {
-    let profile = deeplink::parse_tt_uri(&uri).map_err(|e| e.to_string())?;
+    crate::logging::log(&format!(
+        "import_deeplink: {}",
+        crate::logging::redact_link(&uri)
+    ));
+    let profile = deeplink::parse_tt_uri(&uri).map_err(|e| {
+        crate::logging::log(&format!("import_deeplink: parse failed: {}", e));
+        e.to_string()
+    })?;
+    crate::logging::log(&format!(
+        "import_deeplink: parsed ok (hostname={})",
+        profile.hostname
+    ));
     state.profiles.upsert(profile).map_err(|e| e.to_string())
 }
 
