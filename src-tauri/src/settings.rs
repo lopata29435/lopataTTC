@@ -12,6 +12,11 @@ pub struct Settings {
     pub language: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_tab: Option<String>,
+    /// Автоматически ставить обновления самого GUI при запуске.
+    /// None = не задано = включено (безопасный дефолт: пользователь всегда
+    /// получает фиксы безопасности).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto_update_app: Option<bool>,
     /// Что мы знаем о последнем результате update-check для VPN-клиента
     /// (чтобы UI не висел в "Checking…").
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -54,6 +59,9 @@ impl SettingsStore {
         }
         if patch.last_tab.is_some() {
             s.last_tab = patch.last_tab;
+        }
+        if patch.auto_update_app.is_some() {
+            s.auto_update_app = patch.auto_update_app;
         }
         if patch.last_known_update.is_some() {
             s.last_known_update = patch.last_known_update;

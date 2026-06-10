@@ -39,25 +39,29 @@ function toast(message, kind = "info", opts = {}) {
   text.className = "toast-text";
   text.textContent = String(message);
   el.appendChild(text);
-  if (kind === "error" || opts.copyable) {
+  // Sticky toasts must always carry a Close button, otherwise they can
+  // never be dismissed. The Copy button is for errors (и opts.copyable).
+  if (kind === "error" || opts.copyable || opts.sticky) {
     const actions = document.createElement("div");
     actions.className = "toast-actions";
-    const copyBtn = document.createElement("button");
-    copyBtn.className = "toast-btn";
-    copyBtn.textContent = t("toast.copy");
-    copyBtn.onclick = async (ev) => {
-      ev.stopPropagation();
-      try {
-        await navigator.clipboard.writeText(String(message));
-        copyBtn.textContent = t("toast.copied");
-        setTimeout(() => (copyBtn.textContent = t("toast.copy")), 1400);
-      } catch { /* ignore */ }
-    };
+    if (kind === "error" || opts.copyable) {
+      const copyBtn = document.createElement("button");
+      copyBtn.className = "toast-btn";
+      copyBtn.textContent = t("toast.copy");
+      copyBtn.onclick = async (ev) => {
+        ev.stopPropagation();
+        try {
+          await navigator.clipboard.writeText(String(message));
+          copyBtn.textContent = t("toast.copied");
+          setTimeout(() => (copyBtn.textContent = t("toast.copy")), 1400);
+        } catch { /* ignore */ }
+      };
+      actions.appendChild(copyBtn);
+    }
     const closeBtn = document.createElement("button");
     closeBtn.className = "toast-btn";
     closeBtn.textContent = t("toast.close");
     closeBtn.onclick = () => el.remove();
-    actions.appendChild(copyBtn);
     actions.appendChild(closeBtn);
     el.appendChild(actions);
   }
@@ -548,6 +552,23 @@ async function refreshBinaryInfo() {
   } catch (_) {}
 }
 
+async function setupAutoUpdateToggle() {
+  try {
+    const settings = await invoke("get_settings");
+    appAutoUpdateEnabled = settings.auto_update_app !== false;
+    const box = $("#auto-update-toggle");
+    box.checked = appAutoUpdateEnabled;
+    box.addEventListener("change", async () => {
+      appAutoUpdateEnabled = box.checked;
+      try {
+        await invoke("update_settings", { patch: { auto_update_app: box.checked } });
+      } catch (e) {
+        toast(t("toast.error", { err: describeError(e) }), "error");
+      }
+    });
+  } catch (_) {}
+}
+
 async function setupUninstallCard() {
   try {
     const platform = await invoke("platform_info");
@@ -729,8 +750,43 @@ listen("update://status", evt => {
 });
 
 listen("update://app-status", evt => {
-  renderAppUpdateStatus(evt.payload || {});
+  const status = evt.payload || {};
+  renderAppUpdateStatus(status);
+  maybeAutoInstallAppUpdate(status);
 });
+
+// ===== app auto-update =====
+// The VPN client core already self-updates silently; the GUI must too —
+// otherwise a user who never opens Settings never gets our security fixes.
+let appAutoUpdateEnabled = true;   // mirrors settings.auto_update_app (default on)
+let appAutoUpdateAttempted = false; // at most one attempt per app session
+
+async function maybeAutoInstallAppUpdate(status) {
+  if (!status.update_available || appAutoUpdateAttempted) return;
+  // Read the setting directly: the status event can arrive before bootstrap
+  // has populated appAutoUpdateEnabled from the backend.
+  try {
+    const settings = await invoke("get_settings");
+    if (settings.auto_update_app === false) return;
+  } catch (_) { /* backend unreachable — keep the safe default (on) */ }
+  // Never interrupt an active/connecting VPN session with a restart.
+  if (state.vpnState.state !== "disconnected") {
+    toast(t("toast.appUpdateManual", { version: status.latest || "" }), "info", { sticky: true, copyable: false });
+    appAutoUpdateAttempted = true;
+    return;
+  }
+  appAutoUpdateAttempted = true;
+  toast(t("toast.appAutoUpdating", { version: status.latest || "" }), "info", { sticky: true });
+  try {
+    await invoke("install_app_update");
+    // On success the backend restarts the app — we normally don't get here.
+  } catch (e) {
+    // Most common legit failure: Linux .deb/.rpm installs (updater supports
+    // AppImage only). Point the user at the release page instead of erroring.
+    toast(t("toast.appUpdateManual", { version: status.latest || "" }), "warn", { sticky: true });
+    console.warn("auto-update failed:", e);
+  }
+}
 
 listen("update://installed", evt => {
   const status = evt.payload || {};
@@ -972,6 +1028,7 @@ function setupLanguageSwitcher(names) {
   await refreshBinaryInfo();
   await refreshElevation();
   await setupUninstallCard();
+  await setupAutoUpdateToggle();
 
   // Update-status flow:
   //  1. If there's a cached status from a previous launch, render it now.
