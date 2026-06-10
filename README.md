@@ -1,9 +1,9 @@
-# lopataTTC — TrustTunnel GUI
+# Lopata — клиент TrustTunnel
 
-Кроссплатформенный десктопный клиент (GUI) для VPN-протокола
+**Lopata** — кроссплатформенный десктопный клиент (GUI) для VPN-протокола
 [TrustTunnel](https://github.com/TrustTunnel/TrustTunnelClient): системный трей,
 профили серверов, импорт по `tt://`-ссылкам и `.toml`-конфигам, логи, killswitch
-и автообновления.
+и автообновления. Это независимый клиент; сам протокол и ядро — проект AdGuard.
 
 Технологии: [Tauri 2](https://tauri.app) (Rust backend + WebView frontend, без Node-зависимостей).
 

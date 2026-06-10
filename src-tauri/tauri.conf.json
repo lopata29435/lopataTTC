@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "TrustTunnel",
+  "productName": "Lopata",
   "identifier": "org.trusttunnel.gui",
   "build": {
     "frontendDist": "../src"
@@ -10,7 +10,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "TrustTunnel",
+        "title": "Lopata",
         "width": 920,
         "height": 640,
         "minWidth": 720,
@@ -46,8 +46,8 @@
         "installMode": "perMachine"
       }
     },
-    "longDescription": "Десктопный клиент протокола TrustTunnel с системным треем и поддержкой deeplink.",
-    "shortDescription": "TrustTunnel VPN client",
+    "longDescription": "Lopata — десктопный клиент протокола TrustTunnel с системным треем, автообновлениями и поддержкой tt://-ссылок.",
+    "shortDescription": "Lopata — TrustTunnel VPN client",
     "category": "Utility"
   },
   "plugins": {

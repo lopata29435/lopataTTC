@@ -7,9 +7,9 @@
   --text: #e6ecf5;
   --text-dim: #98a4ba;
   --text-mute: #6b7790;
-  --accent: #3b82f6;
-  --accent-hover: #2563eb;
-  --accent-soft: rgba(59, 130, 246, 0.15);
+  --accent: #8b5cf6;
+  --accent-hover: #7c3aed;
+  --accent-soft: rgba(139, 92, 246, 0.16);
   --success: #22c55e;
   --success-soft: rgba(34, 197, 94, 0.18);
   --warn: #f59e0b;
@@ -74,25 +74,25 @@ button {
 }
 
 .brand-mark {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #3b82f6, #2563eb);
-  position: relative;
-}
-.brand-mark::after {
-  content: "";
-  position: absolute;
-  inset: 6px 7px 7px 7px;
-  background: white;
-  clip-path: polygon(50% 0%, 100% 25%, 100% 65%, 50% 100%, 0% 65%, 0% 25%);
-  opacity: 0.95;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: url('./assets/brand.svg') center / cover no-repeat;
+  flex-shrink: 0;
 }
 
 .brand-name {
-  font-weight: 600;
-  font-size: 16px;
+  font-weight: 650;
+  font-size: 17px;
   letter-spacing: 0.2px;
+  line-height: 1.1;
+}
+
+.brand-sub {
+  font-size: 10.5px;
+  color: var(--text-mute);
+  letter-spacing: 0.3px;
+  margin-top: 2px;
 }
 
 .nav {

@@ -110,6 +110,7 @@
   "settings.paths.dataDir": "Папка данных:",
   "settings.paths.copy": "Копировать путь",
   "settings.paths.notFound": "не найден",
+  "brand.sub": "клиент TrustTunnel",
   "settings.update.auto": "Обновлять приложение автоматически",
   "toast.appAutoUpdating": "Скачиваем обновление {version} — приложение перезапустится автоматически",
   "toast.appUpdateManual": "Доступна новая версия {version}. Установите её вручную: Настройки → Обновления → «Открыть страницу релиза»",

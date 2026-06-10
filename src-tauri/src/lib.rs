@@ -29,6 +29,9 @@ pub struct AppState {
     pub app_data_dir: PathBuf,
     pub binary_path: Arc<Mutex<PathBuf>>,
     pub settings: Arc<SettingsStore>,
+    /// tt:// URIs the app was launched with (cold start via browser click).
+    /// The frontend drains these once it is ready to import.
+    pub startup_deeplinks: Mutex<Vec<String>>,
 }
 
 /// Entry point invoked by main.rs (and by tauri::Builder on mobile in the future).
@@ -130,12 +133,22 @@ pub fn run() {
 
             let app_data_dir_clone = app_data_dir.clone();
             let settings_store = Arc::new(SettingsStore::open(&app_data_dir)?);
+            // Cold-start deep link: when the browser launches us with a tt://
+            // argument there is no running instance to forward to, and nobody
+            // else reads argv — without this the link would be silently lost.
+            // Kept as raw strings: tt:// payloads are not valid url::Url's.
+            let startup_deeplinks: Vec<String> = std::env::args()
+                .skip(1)
+                .filter(|a| a.starts_with("tt://"))
+                .collect();
+
             let state = AppState {
                 profiles,
                 vpn,
                 app_data_dir,
                 binary_path: binary_path.clone(),
                 settings: settings_store,
+                startup_deeplinks: Mutex::new(startup_deeplinks),
             };
             app.manage(state);
 
@@ -174,6 +187,7 @@ pub fn run() {
             commands::import_toml_file,
             commands::import_deeplink,
             commands::extract_deeplink_from_text,
+            commands::take_startup_deeplinks,
             commands::vpn_connect,
             commands::vpn_disconnect,
             commands::vpn_state,
@@ -428,7 +442,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 
     let _tray = TrayIconBuilder::with_id("main")
         .icon(icon)
-        .tooltip("TrustTunnel")
+        .tooltip("Lopata")
         .menu(&menu)
         .on_menu_event(move |app, event| match event.id().as_ref() {
             "show" => {

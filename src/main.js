@@ -910,20 +910,28 @@ listen("vpn://log", evt => {
   appendLog(evt.payload);
 });
 
+// Guards against the same link being delivered twice (e.g. forwarded by the
+// second instance AND picked up by a platform deep-link event).
+const recentDeeplinks = new Set();
+
+async function importDeeplinkUri(u) {
+  if (typeof u !== "string" || !u.startsWith("tt://")) return;
+  if (recentDeeplinks.has(u)) return;
+  recentDeeplinks.add(u);
+  setTimeout(() => recentDeeplinks.delete(u), 10000);
+  try {
+    const profile = await invoke("import_deeplink", { uri: u });
+    toast(t("toast.deeplinkImported", { name: profile.name }), "success");
+    await refreshProfiles();
+    setTab("profiles");
+  } catch (e) {
+    toast(t("toast.importErr", { err: describeError(e) }), "error");
+  }
+}
+
 listen("deep-link://new-url", async evt => {
   const urls = evt.payload || [];
-  for (const u of urls) {
-    if (typeof u === "string" && u.startsWith("tt://")) {
-      try {
-        const profile = await invoke("import_deeplink", { uri: u });
-        toast(t("toast.deeplinkImported", { name: profile.name }), "success");
-        await refreshProfiles();
-        setTab("profiles");
-      } catch (e) {
-        toast(t("toast.importErr", { err: describeError(e) }), "error");
-      }
-    }
-  }
+  for (const u of urls) await importDeeplinkUri(u);
 });
 
 // ===== language switcher =====
@@ -1029,6 +1037,12 @@ function setupLanguageSwitcher(names) {
   await refreshElevation();
   await setupUninstallCard();
   await setupAutoUpdateToggle();
+
+  // Cold-start deep link: the app may have been launched by a tt:// click.
+  try {
+    const pending = await invoke("take_startup_deeplinks");
+    for (const u of pending) await importDeeplinkUri(u);
+  } catch (_) {}
 
   // Update-status flow:
   //  1. If there's a cached status from a previous launch, render it now.

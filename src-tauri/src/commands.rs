@@ -75,6 +75,13 @@ pub fn extract_deeplink_from_text(text: String) -> Option<String> {
     deeplink::extract_tt_uri(&text)
 }
 
+/// Drain the tt:// URIs the app was launched with (cold start from a browser
+/// link). Returns each URI at most once.
+#[tauri::command]
+pub fn take_startup_deeplinks(state: State<AppState>) -> Vec<String> {
+    std::mem::take(&mut *state.startup_deeplinks.lock().unwrap())
+}
+
 #[tauri::command]
 pub async fn vpn_connect(
     app: AppHandle,

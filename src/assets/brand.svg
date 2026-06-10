@@ -1,0 +1,70 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- Lopata app icon: a shovel digging the tunnel. Source of truth for
+       `cargo tauri icon app-icon.svg` (regenerates src-tauri/icons/*). -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4338ca"/>
+      <stop offset="0.55" stop-color="#7c3aed"/>
+      <stop offset="1" stop-color="#a855f7"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.28" cy="0.2" r="0.9">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.16"/>
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0.04"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="steel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#dbe2ec"/>
+    </linearGradient>
+    <linearGradient id="blade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f8fafc"/>
+      <stop offset="1" stop-color="#c7d2e0"/>
+    </linearGradient>
+    <clipPath id="squircle">
+      <rect width="1024" height="1024" rx="224"/>
+    </clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="24"/>
+    </filter>
+  </defs>
+
+  <g clip-path="url(#squircle)">
+    <rect width="1024" height="1024" fill="url(#bg)"/>
+    <rect width="1024" height="1024" fill="url(#glow)"/>
+
+    <!-- tunnel portal hint -->
+    <circle cx="730" cy="300" r="300" fill="none" stroke="#ffffff" stroke-opacity="0.09" stroke-width="58"/>
+    <circle cx="730" cy="300" r="170" fill="none" stroke="#ffffff" stroke-opacity="0.05" stroke-width="34"/>
+
+    <!-- ground shadow -->
+    <ellipse cx="500" cy="906" rx="240" ry="42" fill="#1e1b4b" opacity="0.35" filter="url(#soft)"/>
+
+    <g transform="translate(18 -8) rotate(-14 512 512)">
+      <!-- shovel cast shadow -->
+      <g transform="translate(26 18)" opacity="0.22" filter="url(#soft)">
+        <rect x="392" y="138" width="240" height="66" rx="33" fill="#1e1b4b"/>
+        <rect x="480" y="160" width="64" height="420" rx="32" fill="#1e1b4b"/>
+        <path d="M 382 556 Q 382 520 418 520 L 606 520 Q 642 520 642 556 C 642 690 600 800 512 882 C 424 800 382 690 382 556 Z" fill="#1e1b4b"/>
+      </g>
+
+      <!-- T-grip -->
+      <rect x="392" y="138" width="240" height="66" rx="33" fill="url(#steel)"/>
+      <!-- shaft -->
+      <rect x="480" y="160" width="64" height="420" rx="32" fill="url(#steel)"/>
+      <!-- socket collar -->
+      <rect x="466" y="488" width="92" height="74" rx="20" fill="#eef2f7"/>
+      <!-- blade -->
+      <path d="M 382 556
+               Q 382 520 418 520
+               L 606 520
+               Q 642 520 642 556
+               C 642 690 600 800 512 882
+               C 424 800 382 690 382 556 Z"
+            fill="url(#blade)"/>
+      <!-- blade crease -->
+      <path d="M 512 564 L 512 812" stroke="#7e8da1" stroke-opacity="0.45" stroke-width="14" stroke-linecap="round"/>
+      <!-- blade top edge highlight -->
+      <path d="M 408 536 L 616 536" stroke="#ffffff" stroke-opacity="0.7" stroke-width="12" stroke-linecap="round"/>
+    </g>
+  </g>
+</svg>

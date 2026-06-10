@@ -1,6 +1,6 @@
 [package]
 name = "trusttunnel-gui"
-version = "0.2.3"
+version = "0.3.0"
 edition = "2021"
 rust-version = "1.77"
 
@@ -17,7 +17,11 @@ tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-deep-link = "2"
-tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+# NOTE: deliberately WITHOUT the "deep-link" feature. That feature makes the
+# plugin parse forwarded argv as strict URLs (url::Url) — tt:// links carry a
+# base64 payload in the "host" position which is not a valid URL host, and the
+# failure path can panic. We forward the raw string ourselves in lib.rs.
+tauri-plugin-single-instance = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-updater = "2"
@@ -61,7 +65,9 @@ windows = { version = "0.58", features = [
 windows-service = "0.7"
 
 [profile.release]
-panic = "abort"
+# "unwind", not "abort": with abort a single stray panic (e.g. in a plugin
+# processing a malformed deep link) kills the whole GUI instantly.
+panic = "unwind"
 codegen-units = 1
 lto = true
 opt-level = "s"

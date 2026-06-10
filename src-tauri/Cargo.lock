@@ -4333,7 +4333,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tauri",
- "tauri-plugin-deep-link",
  "thiserror 2.0.18",
  "tracing",
  "windows-sys 0.60.2",
@@ -4897,7 +4896,7 @@ dependencies = [
 
 [[package]]
 name = "trusttunnel-gui"
-version = "0.2.3"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",

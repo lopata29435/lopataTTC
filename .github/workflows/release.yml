@@ -80,14 +80,14 @@ jobs:
 
           | Ваша система | Скачать |
           |---|---|
-          | **Windows 10/11** (обычный ПК — самый частый случай) | **[TrustTunnel_${VER}_x64-setup.exe]($BASE/TrustTunnel_${VER}_x64-setup.exe)** |
-          | Windows на ARM (Surface Pro X и т.п.) | [TrustTunnel_${VER}_arm64-setup.exe]($BASE/TrustTunnel_${VER}_arm64-setup.exe) |
-          | Windows 32-bit (очень старые ПК) | [TrustTunnel_${VER}_x86-setup.exe]($BASE/TrustTunnel_${VER}_x86-setup.exe) |
-          | **macOS** (Intel и Apple Silicon) | [TrustTunnel_${VER}_universal.dmg]($BASE/TrustTunnel_${VER}_universal.dmg) |
-          | **Ubuntu / Debian / Mint** | [TrustTunnel_${VER}_amd64.deb]($BASE/TrustTunnel_${VER}_amd64.deb) |
-          | Fedora / openSUSE | [TrustTunnel-${VER}-1.x86_64.rpm]($BASE/TrustTunnel-${VER}-1.x86_64.rpm) |
-          | Любой Linux (без установки) | [TrustTunnel_${VER}_amd64.AppImage]($BASE/TrustTunnel_${VER}_amd64.AppImage) |
-          | Linux ARM64 (Raspberry Pi 4/5 и т.п.) | [.deb]($BASE/TrustTunnel_${VER}_arm64.deb) · [.rpm]($BASE/TrustTunnel-${VER}-1.aarch64.rpm) · [.AppImage]($BASE/TrustTunnel_${VER}_aarch64.AppImage) |
+          | **Windows 10/11** (обычный ПК — самый частый случай) | **[Lopata_${VER}_x64-setup.exe]($BASE/Lopata_${VER}_x64-setup.exe)** |
+          | Windows на ARM (Surface Pro X и т.п.) | [Lopata_${VER}_arm64-setup.exe]($BASE/Lopata_${VER}_arm64-setup.exe) |
+          | Windows 32-bit (очень старые ПК) | [Lopata_${VER}_x86-setup.exe]($BASE/Lopata_${VER}_x86-setup.exe) |
+          | **macOS** (Intel и Apple Silicon) | [Lopata_${VER}_universal.dmg]($BASE/Lopata_${VER}_universal.dmg) |
+          | **Ubuntu / Debian / Mint** | [Lopata_${VER}_amd64.deb]($BASE/Lopata_${VER}_amd64.deb) |
+          | Fedora / openSUSE | [Lopata-${VER}-1.x86_64.rpm]($BASE/Lopata-${VER}-1.x86_64.rpm) |
+          | Любой Linux (без установки) | [Lopata_${VER}_amd64.AppImage]($BASE/Lopata_${VER}_amd64.AppImage) |
+          | Linux ARM64 (Raspberry Pi 4/5 и т.п.) | [.deb]($BASE/Lopata_${VER}_arm64.deb) · [.rpm]($BASE/Lopata-${VER}-1.aarch64.rpm) · [.AppImage]($BASE/Lopata_${VER}_aarch64.AppImage) |
 
           <details>
           <summary>Что за остальные файлы?</summary>
@@ -99,7 +99,7 @@ jobs:
           EOF
 
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft \
-            --title "TrustTunnel GUI $TAG" \
+            --title "Lopata $TAG" \
             --notes-file notes.md
 
   build:
@@ -218,7 +218,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: 'TrustTunnel GUI ${{ github.ref_name }}'
+          releaseName: 'Lopata ${{ github.ref_name }}'
           # No releaseBody here: the create-draft job already wrote the
           # download guide and we don't want it overwritten.
           releaseDraft: true

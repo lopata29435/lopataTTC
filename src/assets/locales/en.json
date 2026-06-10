@@ -110,6 +110,7 @@
   "settings.paths.dataDir": "Data folder:",
   "settings.paths.copy": "Copy path",
   "settings.paths.notFound": "not found",
+  "brand.sub": "TrustTunnel client",
   "settings.update.auto": "Update the app automatically",
   "toast.appAutoUpdating": "Downloading update {version} — the app will restart automatically",
   "toast.appUpdateManual": "Version {version} is available. Install it manually: Settings → Updates → Open release page",
