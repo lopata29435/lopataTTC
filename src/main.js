@@ -548,6 +548,29 @@ async function refreshBinaryInfo() {
   } catch (_) {}
 }
 
+async function setupUninstallCard() {
+  try {
+    const platform = await invoke("platform_info");
+    // Windows users uninstall via "Apps & features"; the in-app button covers
+    // the platforms that have no standard uninstall flow (AppImage, .dmg, …).
+    $("#uninstall-card").hidden = !(platform.is_linux || platform.is_macos);
+  } catch (_) {}
+}
+
+$("#uninstall-btn")?.addEventListener("click", async () => {
+  if (!confirm(t("confirm.uninstall"))) return;
+  const btn = $("#uninstall-btn");
+  btn.disabled = true;
+  try {
+    await invoke("uninstall_app");
+    toast(t("toast.uninstalled"), "success");
+    // The backend exits the app shortly after.
+  } catch (e) {
+    btn.disabled = false;
+    toast(t("toast.error", { err: describeError(e) }), "error");
+  }
+});
+
 async function refreshElevation() {
   try {
     const platform = await invoke("platform_info");
@@ -948,6 +971,7 @@ function setupLanguageSwitcher(names) {
   await refreshServiceStatus();
   await refreshBinaryInfo();
   await refreshElevation();
+  await setupUninstallCard();
 
   // Update-status flow:
   //  1. If there's a cached status from a previous launch, render it now.

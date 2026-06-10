@@ -237,6 +237,28 @@ pub fn is_elevated() -> bool {
     crate::elevate::is_elevated()
 }
 
+/// Linux/macOS: remove the app, its data and desktop integration, then quit.
+/// Windows has a proper uninstaller in "Apps & features" instead.
+#[tauri::command]
+pub async fn uninstall_app(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        // Stop the VPN first so the elevated client doesn't outlive the app.
+        let _ = state.vpn.disconnect(app.clone()).await;
+        crate::uninstall::uninstall(&state.app_data_dir).map_err(|e| e.to_string())?;
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(700));
+            app.exit(0);
+        });
+        Ok(())
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (app, state);
+        Err("На Windows удаляйте приложение через «Установка и удаление программ»".into())
+    }
+}
+
 #[tauri::command]
 pub fn show_window(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("main") {

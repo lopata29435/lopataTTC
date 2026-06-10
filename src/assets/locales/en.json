@@ -110,6 +110,11 @@
   "settings.paths.dataDir": "Data folder:",
   "settings.paths.copy": "Copy path",
   "settings.paths.notFound": "not found",
+  "settings.uninstall.title": "Uninstall",
+  "settings.uninstall.body": "Completely removes the app, all profiles and the downloaded VPN client.",
+  "settings.uninstall.btn": "Remove everything",
+  "confirm.uninstall": "This will remove the app, all servers (profiles), settings and the downloaded VPN client. This cannot be undone. Continue?",
+  "toast.uninstalled": "Uninstall started — the app will close now",
 
   "settings.language.title": "Language",
   "settings.language.body": "Interface language. To add another, drop a JSON file into src/assets/locales/.",

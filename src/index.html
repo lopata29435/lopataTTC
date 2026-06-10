@@ -151,6 +151,18 @@
               </div>
             </div>
 
+            <!-- Linux/macOS only: Windows has the standard uninstaller in
+                 "Apps & features", so the card stays hidden there. -->
+            <div class="setting-card" id="uninstall-card" hidden>
+              <div class="setting-head">
+                <h3 data-i18n="settings.uninstall.title">Удалить приложение</h3>
+                <p data-i18n="settings.uninstall.body">Полностью удаляет приложение, все профили и скачанный VPN-клиент.</p>
+              </div>
+              <div class="setting-controls">
+                <button class="btn danger" id="uninstall-btn" data-i18n="settings.uninstall.btn">Удалить всё</button>
+              </div>
+            </div>
+
             <div class="setting-card">
               <div class="setting-head">
                 <h3 data-i18n="settings.paths.title">Пути</h3>

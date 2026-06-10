@@ -110,6 +110,11 @@
   "settings.paths.dataDir": "Папка данных:",
   "settings.paths.copy": "Копировать путь",
   "settings.paths.notFound": "не найден",
+  "settings.uninstall.title": "Удалить приложение",
+  "settings.uninstall.body": "Полностью удаляет приложение, все профили и скачанный VPN-клиент.",
+  "settings.uninstall.btn": "Удалить всё",
+  "confirm.uninstall": "Будут удалены: приложение, все серверы (профили), настройки и скачанный VPN-клиент. Это действие необратимо. Продолжить?",
+  "toast.uninstalled": "Удаление запущено — приложение сейчас закроется",
 
   "settings.language.title": "Язык",
   "settings.language.body": "Язык интерфейса. Чтобы добавить новый — положи JSON в src/assets/locales/.",

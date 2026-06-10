@@ -5,6 +5,7 @@ pub mod elevate;
 pub mod profiles;
 pub mod service;
 pub mod settings;
+pub mod uninstall;
 pub mod updater;
 pub mod vpn;
 
@@ -185,6 +186,7 @@ pub fn run() {
             commands::app_data_dir,
             commands::platform_info,
             commands::is_elevated,
+            commands::uninstall_app,
             commands::restart_as_admin,
             commands::register_deeplink_scheme,
             commands::show_window,
