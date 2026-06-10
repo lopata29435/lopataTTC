@@ -2,13 +2,13 @@
 
 🇷🇺 [Читать по-русски](README.ru.md)
 
-Cross-platform desktop client for the [TrustTunnel](https://github.com/TrustTunnel/TrustTunnelClient)
-VPN protocol. System tray, server profiles, `tt://` link import, logs, kill-switch,
-automatic updates. Built with [Tauri 2](https://tauri.app) (Rust + WebView).
+Desktop client for the [TrustTunnel](https://github.com/TrustTunnel/TrustTunnelClient)
+VPN protocol for Windows, macOS and Linux. System tray, server profiles,
+`tt://` link import, connection logs, kill-switch, automatic updates.
 
 ## Download
 
-Grab the installer from the [latest release](https://github.com/lopata29435/lopataTTC/releases/latest):
+Get the installer from the [latest release](https://github.com/lopata29435/lopataTTC/releases/latest):
 
 | Your system | File |
 |---|---|
@@ -17,59 +17,42 @@ Grab the installer from the [latest release](https://github.com/lopata29435/lopa
 | **macOS** (Intel & Apple Silicon) | `Lopata_*_universal.dmg` |
 | **Ubuntu / Debian / Mint** | `*_amd64.deb` |
 | Fedora / openSUSE | `*.x86_64.rpm` |
-| Any Linux (portable) | `*_amd64.AppImage` |
+| Any Linux (portable, no install) | `*_amd64.AppImage` |
 
-The `trusttunnel_client` core is downloaded automatically from the official
-upstream releases on first launch. Both the app and the core then keep
-themselves up to date.
+The VPN core is downloaded automatically on first launch. After that both the
+app and the core keep themselves up to date — no manual updates needed.
 
-## Usage
+## How to use
 
-1. Install and launch.
-2. Add a server: click a `tt://` link in the browser, paste one from the
-   clipboard, or import a client `.toml` config.
+1. Install and launch Lopata.
+2. Add a server in any convenient way:
+   * click a `tt://` link in your browser;
+   * copy a `tt://` link and press **Import from clipboard**;
+   * import a `.toml` config file.
 3. Press **Connect**.
 
-Administrator rights are required to create the TUN interface: Windows asks
-once at startup (UAC), Linux/macOS ask at connect time (pkexec / system dialog).
+Administrator rights are required to create the VPN network interface:
+Windows asks once at startup (UAC prompt), Linux and macOS ask when you
+press Connect.
 
-### Profile options
+## Profile options
 
 | Option | Values |
 |---|---|
 | Protocol | HTTP/2 (TCP) or HTTP/3 (QUIC) |
-| VPN mode | `general` (everything through VPN) or `selective` (listed domains only) |
-| Anti-DPI, kill-switch, post-quantum TLS | on/off |
+| VPN mode | `general` — all traffic through VPN, or `selective` — only listed domains |
+| Anti-DPI | masks VPN traffic from deep packet inspection |
+| Kill-switch | blocks traffic if the VPN connection drops |
+| Post-quantum TLS | on/off |
 | Custom SNI, DNS upstreams, route exclusions | free-form |
-
-## Build from source
-
-```bash
-cargo install tauri-cli --locked
-cargo tauri dev     # run
-cargo tauri build   # produce installers
-```
-
-Linux build deps: see [ci.yml](.github/workflows/ci.yml).
-
-## Release
-
-Bump the version in `src-tauri/Cargo.toml` **and** `package.json`, then:
-
-```bash
-git tag vX.Y.Z && git push origin master --tags
-```
-
-CI builds all platforms, signs the updater artifacts and publishes the release
-automatically.
 
 ## License
 
-Lopata is licensed under the [MIT License](LICENSE).
+Lopata is free software under the [MIT License](LICENSE).
 
 Lopata is an independent third-party client and is **not affiliated with
-AdGuard**. The TrustTunnel protocol and the `trusttunnel_client` core are
-© AdGuard Software Ltd, licensed under Apache License 2.0. Lopata does not
-bundle or modify the core — it downloads unmodified official builds from the
-[upstream releases](https://github.com/TrustTunnel/TrustTunnelClient/releases)
-at first launch, which is permitted by the Apache 2.0 license.
+AdGuard**. The TrustTunnel protocol and the VPN core are © AdGuard Software
+Ltd, licensed under Apache License 2.0. Lopata does not bundle or modify the
+core — it downloads unmodified official builds from the
+[upstream releases](https://github.com/TrustTunnel/TrustTunnelClient/releases),
+which is permitted by the Apache 2.0 license.
