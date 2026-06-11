@@ -1,58 +1,66 @@
 use anyhow::{anyhow, bail, Result};
-use base64::engine::general_purpose::{STANDARD, STANDARD_NO_PAD, URL_SAFE, URL_SAFE_NO_PAD};
+use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use base64::Engine;
-use serde_json::Value as JsonValue;
-use std::collections::HashMap;
 
 use crate::profiles::Profile;
 
+// Parser for the official TrustTunnel deep-link format (DEEP_LINK.md in the
+// upstream TrustTunnel repo): `tt://?<base64url payload>` where the payload
+// is a sequence of TLV fields. Tag and Length are QUIC varints (RFC 9000 §16),
+// values are field-specific.
+
+/// Highest deep-link format version this parser understands.
+const MAX_SUPPORTED_VERSION: u64 = 1;
+
+const TAG_VERSION: u64 = 0x00;
+const TAG_HOSTNAME: u64 = 0x01;
+const TAG_ADDRESS: u64 = 0x02;
+const TAG_CUSTOM_SNI: u64 = 0x03;
+const TAG_HAS_IPV6: u64 = 0x04;
+const TAG_USERNAME: u64 = 0x05;
+const TAG_PASSWORD: u64 = 0x06;
+const TAG_SKIP_VERIFICATION: u64 = 0x07;
+const TAG_CERTIFICATE: u64 = 0x08;
+const TAG_UPSTREAM_PROTOCOL: u64 = 0x09;
+const TAG_ANTI_DPI: u64 = 0x0A;
+const TAG_CLIENT_RANDOM_PREFIX: u64 = 0x0B;
+const TAG_NAME: u64 = 0x0C;
+const TAG_DNS_UPSTREAMS: u64 = 0x0D;
+
 /// Parse a `tt://?<payload>` deep-link URI into a Profile.
-///
-/// The TrustTunnel `tt://` deep-link payload format is not publicly documented in
-/// detail; we try multiple decoders and report which ones failed in case nothing matches.
 pub fn parse_tt_uri(uri: &str) -> Result<Profile> {
     let stripped = uri
         .strip_prefix("tt://")
-        .ok_or_else(|| anyhow!("URI must start with tt:// (got: {})", short(uri, 60)))?;
+        .ok_or_else(|| anyhow!("ссылка должна начинаться с tt:// (получено: {})", short(uri, 60)))?;
 
     // accept "tt://?xxx" and "tt://xxx" and "tt:///?xxx"
     let payload = stripped.trim_start_matches('/').trim_start_matches('?');
-
     if payload.is_empty() {
-        bail!("Пустой payload после tt://");
+        bail!("пустая ссылка: после tt:// ничего нет");
     }
 
-    let mut tried: Vec<String> = Vec::new();
+    // Browsers may percent-encode the URI before handing it to the app.
+    let payload = urlencoding::decode(payload)
+        .map(|c| c.into_owned())
+        .unwrap_or_else(|_| payload.to_string());
 
-    if let Some(profile) = try_decode_payload(payload, &mut tried) {
-        return Ok(profile);
-    }
+    // Spec says base64url without padding; be lenient about padding and the
+    // standard alphabet, since links get mangled by chats and copy-paste.
+    let normalized: String = payload
+        .trim_end_matches('=')
+        .chars()
+        .map(|c| match c {
+            '+' => '-',
+            '/' => '_',
+            c => c,
+        })
+        .collect();
 
-    // also try as query parameters (k=v&k=v)
-    let params = parse_query(payload);
-    if !params.is_empty() {
-        tried.push(format!(
-            "query params: {:?}",
-            params.keys().collect::<Vec<_>>()
-        ));
-        for key in ["config", "c", "data", "payload"] {
-            if let Some(val) = params.get(key) {
-                if let Some(p) = try_decode_payload(val, &mut tried) {
-                    return Ok(p);
-                }
-            }
-        }
-        if let Some(p) = profile_from_params(&params) {
-            return Ok(p);
-        }
-    }
+    let bytes = URL_SAFE_NO_PAD
+        .decode(normalized.as_bytes())
+        .map_err(|e| anyhow!("не удалось декодировать base64: {}", e))?;
 
-    bail!(
-        "Не удалось декодировать tt:// payload.\n\nPayload (preview): {}\nДлина: {} симв.\n\nПопытки:\n - {}\n\nПришли эту ссылку в чат, я подгоню парсер под формат.",
-        short(payload, 120),
-        payload.len(),
-        tried.join("\n - "),
-    );
+    parse_tlv_payload(&bytes)
 }
 
 fn short(s: &str, n: usize) -> String {
@@ -65,322 +73,195 @@ fn short(s: &str, n: usize) -> String {
     }
 }
 
-fn try_decode_payload(payload: &str, tried: &mut Vec<String>) -> Option<Profile> {
-    let url_decoded = urlencoding::decode(payload)
-        .map(|c| c.into_owned())
-        .unwrap_or_else(|_| payload.to_string());
-
-    if let Some(p) = parse_blob_as_profile(url_decoded.as_bytes()) {
-        return Some(p);
+/// Read a QUIC variable-length integer (RFC 9000 §16): the two most
+/// significant bits of the first byte encode the total size (1/2/4/8 bytes),
+/// multi-byte values are big-endian.
+fn read_varint(data: &[u8], i: &mut usize) -> Result<u64> {
+    let first = *data
+        .get(*i)
+        .ok_or_else(|| anyhow!("обрезанные данные: ожидался varint на смещении {}", *i))?;
+    let len = 1usize << (first >> 6);
+    if *i + len > data.len() {
+        bail!("обрезанный varint на смещении {}", *i);
     }
-    tried.push("url-decoded → JSON/TOML: не подошло".to_string());
+    let mut v = (first & 0x3F) as u64;
+    for k in 1..len {
+        v = (v << 8) | data[*i + k] as u64;
+    }
+    *i += len;
+    Ok(v)
+}
 
-    macro_rules! try_engine {
-        ($name:expr, $engine:expr, $input:expr) => {
-            match $engine.decode($input.as_bytes()) {
-                Ok(bytes) => {
-                    if let Some(p) = parse_blob_as_profile(&bytes) {
-                        return Some(p);
-                    }
-                    tried.push(format!(
-                        "{}: декодировал {} байт, но это не JSON/TOML",
-                        $name,
-                        bytes.len()
-                    ));
-                }
-                Err(e) => {
-                    tried.push(format!("{}: {}", $name, e));
-                }
+fn decode_string(value: &[u8]) -> Result<String> {
+    Ok(std::str::from_utf8(value)
+        .map_err(|e| anyhow!("строка не в UTF-8: {}", e))?
+        .to_string())
+}
+
+fn decode_bool(value: &[u8]) -> Result<bool> {
+    match value {
+        [0x00] => Ok(false),
+        [0x01] => Ok(true),
+        _ => bail!("некорректное булево значение: {:02X?}", value),
+    }
+}
+
+/// String[]: concatenation of varint-length-prefixed UTF-8 strings.
+fn decode_string_array(value: &[u8]) -> Result<Vec<String>> {
+    let mut out = Vec::new();
+    let mut i = 0usize;
+    while i < value.len() {
+        let len = read_varint(value, &mut i)? as usize;
+        if i + len > value.len() {
+            bail!("обрезанный элемент списка строк");
+        }
+        out.push(decode_string(&value[i..i + len])?);
+        i += len;
+    }
+    Ok(out)
+}
+
+/// `prefix[/mask]`, both parts hex.
+fn validate_client_random_prefix(s: &str) -> Result<()> {
+    let (prefix, mask) = s.split_once('/').unwrap_or((s, ""));
+    for (part, what) in [(prefix, "префикс"), (mask, "маска")] {
+        if part.len() % 2 != 0 || !part.chars().all(|c| c.is_ascii_hexdigit()) {
+            bail!("client_random_prefix: {} должен быть hex-строкой", what);
+        }
+    }
+    Ok(())
+}
+
+/// Convert one or more concatenated DER certificates into a PEM chain,
+/// which is what the client config `certificate` field expects.
+fn der_chain_to_pem(der: &[u8]) -> Result<String> {
+    let mut out = String::new();
+    let mut i = 0usize;
+    while i < der.len() {
+        let start = i;
+        if der[i] != 0x30 {
+            bail!("сертификат: ожидался DER SEQUENCE на смещении {}", i);
+        }
+        i += 1;
+        let first_len = *der
+            .get(i)
+            .ok_or_else(|| anyhow!("сертификат: обрезанный DER"))?;
+        i += 1;
+        let body_len = if first_len & 0x80 == 0 {
+            first_len as usize
+        } else {
+            let n = (first_len & 0x7F) as usize;
+            if n == 0 || n > 4 || i + n > der.len() {
+                bail!("сертификат: некорректная DER-длина");
             }
+            let mut v = 0usize;
+            for k in 0..n {
+                v = (v << 8) | der[i + k] as usize;
+            }
+            i += n;
+            v
         };
+        let end = i + body_len;
+        if end > der.len() {
+            bail!("сертификат: обрезанные DER-данные");
+        }
+        out.push_str("-----BEGIN CERTIFICATE-----\n");
+        let b64 = STANDARD.encode(&der[start..end]);
+        for chunk in b64.as_bytes().chunks(64) {
+            out.push_str(std::str::from_utf8(chunk).expect("base64 is ascii"));
+            out.push('\n');
+        }
+        out.push_str("-----END CERTIFICATE-----\n");
+        i = end;
     }
-
-    try_engine!("base64 STANDARD (url-decoded)", &STANDARD, url_decoded);
-    try_engine!("base64 URL_SAFE (url-decoded)", &URL_SAFE, url_decoded);
-    try_engine!(
-        "base64 STANDARD_NO_PAD (url-decoded)",
-        &STANDARD_NO_PAD,
-        url_decoded
-    );
-    try_engine!(
-        "base64 URL_SAFE_NO_PAD (url-decoded)",
-        &URL_SAFE_NO_PAD,
-        url_decoded
-    );
-
-    if url_decoded != payload {
-        try_engine!("base64 STANDARD (raw)", &STANDARD, payload);
-        try_engine!("base64 URL_SAFE (raw)", &URL_SAFE, payload);
-        try_engine!("base64 STANDARD_NO_PAD (raw)", &STANDARD_NO_PAD, payload);
-        try_engine!("base64 URL_SAFE_NO_PAD (raw)", &URL_SAFE_NO_PAD, payload);
+    if out.is_empty() {
+        bail!("сертификат: пустое поле");
     }
-
-    None
+    Ok(out)
 }
 
-fn parse_blob_as_profile(bytes: &[u8]) -> Option<Profile> {
-    // First try the binary AdGuard TrustTunnel format.
-    if let Ok(p) = parse_adguard_binary(bytes) {
-        if !p.hostname.is_empty() {
-            return Some(p);
-        }
-    }
-    // Then try JSON
-    if let Ok(text) = std::str::from_utf8(bytes) {
-        if let Ok(v) = serde_json::from_str::<JsonValue>(text) {
-            if let Some(p) = profile_from_json(&v) {
-                return Some(p);
-            }
-        }
-        // Try TOML
-        if let Ok(p) = Profile::from_toml_str(text, "Imported") {
-            if !p.hostname.is_empty() {
-                return Some(p);
-            }
-        }
-    }
-    None
-}
+fn parse_tlv_payload(bytes: &[u8]) -> Result<Profile> {
+    let mut i = 0usize;
 
-/// Parse AdGuard TrustTunnel binary deeplink payload.
-/// Format (observed): `00 01 <field>*` where each field is one of:
-///   tag 0x01 (hostname list): `<count> [<len><utf8>]*`
-///   tag 0x02 (address):       `<len><utf8>`        — may repeat for multi-address
-///   tag 0x05 (username):      `<len><utf8>`
-///   tag 0x06 (password):      `<len><utf8>`
-///   tag 0x0C (display name):  `<len><utf8>`
-///   tag 0x0D (dns upstreams): `<total_len> [<len><utf8>]*`
-///   unknown tags are skipped as `<len><value>`.
-fn parse_adguard_binary(bytes: &[u8]) -> Result<Profile> {
-    if bytes.len() < 3 {
-        bail!("payload too short");
-    }
-    if bytes[0] != 0x00 || bytes[1] != 0x01 {
-        bail!("missing magic 00 01");
-    }
-    let mut i: usize = 2;
+    let mut hostname: Option<String> = None;
+    let mut addresses: Vec<String> = Vec::new();
+    let mut username: Option<String> = None;
+    let mut password: Option<String> = None;
+    let mut name: Option<String> = None;
 
     let mut profile = Profile::new_blank("Imported");
 
-    fn read_str(bytes: &[u8], i: &mut usize) -> Result<String> {
-        if *i >= bytes.len() {
-            bail!("truncated: expected length byte");
-        }
-        let len = bytes[*i] as usize;
-        *i += 1;
-        if *i + len > bytes.len() {
+    while i < bytes.len() {
+        let tag = read_varint(bytes, &mut i)?;
+        let len = read_varint(bytes, &mut i)? as usize;
+        if i + len > bytes.len() {
             bail!(
-                "truncated: length {} exceeds remaining {}",
+                "обрезанное поле (тег 0x{:02X}): заявлено {} байт, осталось {}",
+                tag,
                 len,
-                bytes.len() - *i
+                bytes.len() - i
             );
         }
-        let s = std::str::from_utf8(&bytes[*i..*i + len])
-            .map_err(|e| anyhow!("invalid utf-8: {}", e))?
-            .to_string();
-        *i += len;
-        Ok(s)
-    }
+        let value = &bytes[i..i + len];
+        i += len;
 
-    while i < bytes.len() {
-        let tag = bytes[i];
-        i += 1;
         match tag {
-            0x01 => {
-                // count + list of strings
-                if i >= bytes.len() {
-                    bail!("truncated at field 0x01");
-                }
-                let count = bytes[i] as usize;
-                i += 1;
-                for n in 0..count {
-                    let s = read_str(bytes, &mut i)?;
-                    if n == 0 {
-                        profile.hostname = s;
-                    }
-                    // additional hostnames could be stored if the protocol supports them
+            TAG_VERSION => {
+                let mut vi = 0usize;
+                let v = read_varint(value, &mut vi)?;
+                if v > MAX_SUPPORTED_VERSION {
+                    bail!(
+                        "ссылка создана более новой версией TrustTunnel (формат v{}, поддерживается до v{}) — обновите приложение",
+                        v,
+                        MAX_SUPPORTED_VERSION
+                    );
                 }
             }
-            0x02 => {
-                let s = read_str(bytes, &mut i)?;
-                profile.addresses.push(s);
+            TAG_HOSTNAME => hostname = Some(decode_string(value)?),
+            TAG_ADDRESS => addresses.push(decode_string(value)?),
+            TAG_CUSTOM_SNI => profile.custom_sni = decode_string(value)?,
+            TAG_HAS_IPV6 => profile.has_ipv6 = decode_bool(value)?,
+            TAG_USERNAME => username = Some(decode_string(value)?),
+            TAG_PASSWORD => password = Some(decode_string(value)?),
+            TAG_SKIP_VERIFICATION => profile.skip_verification = decode_bool(value)?,
+            TAG_CERTIFICATE => profile.certificate = der_chain_to_pem(value)?,
+            TAG_UPSTREAM_PROTOCOL => {
+                profile.upstream_protocol = match value {
+                    [0x01] => "http2".to_string(),
+                    [0x02] => "http3".to_string(),
+                    _ => bail!("неизвестный upstream_protocol: {:02X?}", value),
+                };
             }
-            0x05 => {
-                profile.username = read_str(bytes, &mut i)?;
+            TAG_ANTI_DPI => profile.anti_dpi = decode_bool(value)?,
+            TAG_CLIENT_RANDOM_PREFIX => {
+                let s = decode_string(value)?;
+                validate_client_random_prefix(&s)?;
+                profile.client_random = s;
             }
-            0x06 => {
-                profile.password = read_str(bytes, &mut i)?;
-            }
-            0x0C => {
-                profile.name = read_str(bytes, &mut i)?;
-            }
-            0x0D => {
-                if i >= bytes.len() {
-                    bail!("truncated at field 0x0D");
-                }
-                let total = bytes[i] as usize;
-                i += 1;
-                let end = i + total;
-                if end > bytes.len() {
-                    bail!("0x0D total exceeds buffer");
-                }
-                let mut dns = Vec::new();
-                while i < end {
-                    let s = read_str(bytes, &mut i)?;
-                    dns.push(s);
-                }
+            TAG_NAME => name = Some(decode_string(value)?),
+            TAG_DNS_UPSTREAMS => {
+                let dns = decode_string_array(value)?;
                 if !dns.is_empty() {
                     profile.dns_upstreams = dns;
                 }
             }
-            _ => {
-                // Unknown tag — skip as length-prefixed value.
-                if i >= bytes.len() {
-                    break;
-                }
-                let len = bytes[i] as usize;
-                i += 1;
-                if i + len > bytes.len() {
-                    bail!(
-                        "unknown tag 0x{:02X} has length {} exceeding buffer",
-                        tag,
-                        len
-                    );
-                }
-                i += len;
-            }
+            // Unknown tags are ignored per spec (forward compatibility).
+            _ => {}
         }
     }
 
-    if profile.hostname.is_empty() {
-        bail!("hostname is empty after parsing");
+    // Required fields per spec.
+    let hostname = hostname.ok_or_else(|| anyhow!("в ссылке нет обязательного поля hostname"))?;
+    if addresses.is_empty() {
+        bail!("в ссылке нет обязательного поля addresses");
     }
-    // If no addresses parsed, default to "<hostname>:443" — TrustTunnel default.
-    if profile.addresses.is_empty() {
-        profile.addresses.push(format!("{}:443", profile.hostname));
-    }
+    profile.hostname = hostname;
+    profile.addresses = addresses;
+    profile.username = username.ok_or_else(|| anyhow!("в ссылке нет обязательного поля username"))?;
+    profile.password = password.ok_or_else(|| anyhow!("в ссылке нет обязательного поля password"))?;
+    profile.name = name.unwrap_or_else(|| profile.hostname.clone());
+
     Ok(profile)
-}
-
-fn profile_from_json(v: &JsonValue) -> Option<Profile> {
-    let obj = v.as_object()?;
-    // The endpoint fields may be nested under "endpoint" or at the top.
-    let endpoint_obj = obj
-        .get("endpoint")
-        .and_then(|x| x.as_object())
-        .unwrap_or(obj);
-
-    let s = |k: &str| {
-        endpoint_obj
-            .get(k)
-            .and_then(|x| x.as_str())
-            .map(String::from)
-    };
-    let b = |k: &str| endpoint_obj.get(k).and_then(|x| x.as_bool());
-    let arr = |k: &str| {
-        endpoint_obj
-            .get(k)
-            .and_then(|x| x.as_array())
-            .map(|a| {
-                a.iter()
-                    .filter_map(|x| x.as_str().map(String::from))
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default()
-    };
-
-    let hostname = s("hostname").or_else(|| s("host")).unwrap_or_default();
-    if hostname.is_empty() {
-        return None;
-    }
-
-    let name = obj
-        .get("name")
-        .and_then(|x| x.as_str())
-        .map(String::from)
-        .or_else(|| {
-            endpoint_obj
-                .get("name")
-                .and_then(|x| x.as_str())
-                .map(String::from)
-        })
-        .unwrap_or_else(|| hostname.clone());
-
-    let mut profile = Profile::new_blank(&name);
-    profile.hostname = hostname;
-    profile.addresses = arr("addresses");
-    profile.username = s("username").or_else(|| s("user")).unwrap_or_default();
-    profile.password = s("password").or_else(|| s("pass")).unwrap_or_default();
-    profile.custom_sni = s("custom_sni").or_else(|| s("sni")).unwrap_or_default();
-    if let Some(v) = b("has_ipv6") {
-        profile.has_ipv6 = v;
-    }
-    profile.upstream_protocol = s("upstream_protocol").unwrap_or_else(|| "http2".into());
-    if let Some(v) = b("anti_dpi") {
-        profile.anti_dpi = v;
-    }
-    let dns = arr("dns_upstreams");
-    if !dns.is_empty() {
-        profile.dns_upstreams = dns;
-    }
-    if let Some(v) = b("skip_verification") {
-        profile.skip_verification = v;
-    }
-    Some(profile)
-}
-
-fn profile_from_params(params: &HashMap<String, String>) -> Option<Profile> {
-    let hostname = params
-        .get("hostname")
-        .or_else(|| params.get("host"))?
-        .clone();
-    let name = params
-        .get("name")
-        .cloned()
-        .unwrap_or_else(|| hostname.clone());
-    let mut profile = Profile::new_blank(&name);
-    profile.hostname = hostname;
-    if let Some(p) = params.get("port") {
-        profile.addresses = vec![format!("{}:{}", profile.hostname, p)];
-    }
-    if let Some(u) = params.get("username").or_else(|| params.get("user")) {
-        profile.username = u.clone();
-    }
-    if let Some(p) = params.get("password").or_else(|| params.get("pass")) {
-        profile.password = p.clone();
-    }
-    if let Some(s) = params.get("sni").or_else(|| params.get("custom_sni")) {
-        profile.custom_sni = s.clone();
-    }
-    if let Some(p) = params
-        .get("protocol")
-        .or_else(|| params.get("upstream_protocol"))
-    {
-        profile.upstream_protocol = p.clone();
-    }
-    Some(profile)
-}
-
-fn parse_query(q: &str) -> HashMap<String, String> {
-    let mut out = HashMap::new();
-    for pair in q.split('&') {
-        if pair.is_empty() {
-            continue;
-        }
-        let mut it = pair.splitn(2, '=');
-        let k = it.next().unwrap_or("");
-        let v = it.next().unwrap_or("");
-        let k = urlencoding::decode(k)
-            .map(|c| c.into_owned())
-            .unwrap_or_else(|_| k.to_string());
-        let v = urlencoding::decode(v)
-            .map(|c| c.into_owned())
-            .unwrap_or_else(|_| v.to_string());
-        if !k.is_empty() {
-            out.insert(k, v);
-        }
-    }
-    out
 }
 
 /// Look for tt:// URIs in a free-form text blob (e.g. clipboard contents).
@@ -391,4 +272,195 @@ pub fn extract_tt_uri(text: &str) -> Option<String> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn varint(v: u64) -> Vec<u8> {
+        if v < 64 {
+            vec![v as u8]
+        } else if v < 16384 {
+            vec![0x40 | (v >> 8) as u8, v as u8]
+        } else {
+            vec![
+                0x80 | (v >> 24) as u8,
+                (v >> 16) as u8,
+                (v >> 8) as u8,
+                v as u8,
+            ]
+        }
+    }
+
+    fn tlv(tag: u64, value: &[u8]) -> Vec<u8> {
+        let mut out = varint(tag);
+        out.extend(varint(value.len() as u64));
+        out.extend_from_slice(value);
+        out
+    }
+
+    fn tlv_str(tag: u64, s: &str) -> Vec<u8> {
+        tlv(tag, s.as_bytes())
+    }
+
+    /// Minimal fake DER cert: SEQUENCE header + opaque body.
+    fn fake_der_cert(body_len: usize) -> Vec<u8> {
+        let mut out = vec![0x30];
+        if body_len < 128 {
+            out.push(body_len as u8);
+        } else {
+            out.push(0x82);
+            out.push((body_len >> 8) as u8);
+            out.push(body_len as u8);
+        }
+        out.extend(std::iter::repeat(0xAB).take(body_len));
+        out
+    }
+
+    fn base_payload() -> Vec<u8> {
+        let mut p = Vec::new();
+        p.extend(tlv(TAG_VERSION, &[0x01]));
+        p.extend(tlv_str(TAG_HOSTNAME, "vpn.example.com"));
+        p.extend(tlv_str(TAG_ADDRESS, "vpn.example.com:12443"));
+        p.extend(tlv_str(TAG_USERNAME, "alice"));
+        p.extend(tlv_str(TAG_PASSWORD, "s3cret"));
+        p
+    }
+
+    fn to_uri(payload: &[u8]) -> String {
+        format!("tt://?{}", URL_SAFE_NO_PAD.encode(payload))
+    }
+
+    #[test]
+    fn parses_minimal_link() {
+        let p = parse_tt_uri(&to_uri(&base_payload())).unwrap();
+        assert_eq!(p.hostname, "vpn.example.com");
+        assert_eq!(p.addresses, vec!["vpn.example.com:12443"]);
+        assert_eq!(p.username, "alice");
+        assert_eq!(p.password, "s3cret");
+        // defaults per spec
+        assert!(p.has_ipv6);
+        assert!(!p.skip_verification);
+        assert!(!p.anti_dpi);
+        assert_eq!(p.upstream_protocol, "http2");
+        assert_eq!(p.name, "vpn.example.com");
+        assert!(p.certificate.is_empty());
+    }
+
+    #[test]
+    fn parses_full_link_with_certificate() {
+        let mut payload = base_payload();
+        // protocol http2 explicitly, like real server-generated links
+        payload.extend(tlv(TAG_UPSTREAM_PROTOCOL, &[0x01]));
+        // a 380-byte cert forces a 2-byte varint TLV length, the case the
+        // old parser choked on
+        let cert = fake_der_cert(376);
+        assert_eq!(cert.len(), 380);
+        payload.extend(tlv(TAG_CERTIFICATE, &cert));
+        payload.extend(tlv_str(TAG_NAME, "My Server"));
+        payload.extend(tlv(TAG_HAS_IPV6, &[0x00]));
+        payload.extend(tlv(TAG_ANTI_DPI, &[0x01]));
+
+        let p = parse_tt_uri(&to_uri(&payload)).unwrap();
+        assert_eq!(p.name, "My Server");
+        assert!(!p.has_ipv6);
+        assert!(p.anti_dpi);
+        assert_eq!(p.upstream_protocol, "http2");
+        assert!(p.certificate.starts_with("-----BEGIN CERTIFICATE-----\n"));
+        assert!(p.certificate.trim_end().ends_with("-----END CERTIFICATE-----"));
+    }
+
+    #[test]
+    fn certificate_chain_yields_multiple_pem_blocks() {
+        let mut chain = fake_der_cert(100);
+        chain.extend(fake_der_cert(200));
+        let pem = der_chain_to_pem(&chain).unwrap();
+        assert_eq!(pem.matches("BEGIN CERTIFICATE").count(), 2);
+    }
+
+    #[test]
+    fn parses_dns_upstreams_array() {
+        let mut payload = base_payload();
+        let mut arr = Vec::new();
+        for s in ["1.1.1.1", "tls://dns.example.com"] {
+            arr.extend(varint(s.len() as u64));
+            arr.extend_from_slice(s.as_bytes());
+        }
+        payload.extend(tlv(TAG_DNS_UPSTREAMS, &arr));
+        let p = parse_tt_uri(&to_uri(&payload)).unwrap();
+        assert_eq!(p.dns_upstreams, vec!["1.1.1.1", "tls://dns.example.com"]);
+    }
+
+    #[test]
+    fn ignores_unknown_tags() {
+        let mut payload = base_payload();
+        payload.extend(tlv(0x1F, &[0xDE, 0xAD]));
+        assert!(parse_tt_uri(&to_uri(&payload)).is_ok());
+    }
+
+    #[test]
+    fn rejects_newer_version() {
+        let mut payload = Vec::new();
+        payload.extend(tlv(TAG_VERSION, &[0x02]));
+        payload.extend(&base_payload()[3..]); // skip the v1 version TLV
+        let err = parse_tt_uri(&to_uri(&payload)).unwrap_err().to_string();
+        assert!(err.contains("v2"), "{}", err);
+    }
+
+    #[test]
+    fn rejects_missing_required_fields() {
+        let mut payload = Vec::new();
+        payload.extend(tlv_str(TAG_HOSTNAME, "vpn.example.com"));
+        let err = parse_tt_uri(&to_uri(&payload)).unwrap_err().to_string();
+        assert!(err.contains("addresses"), "{}", err);
+    }
+
+    #[test]
+    fn rejects_truncated_payload() {
+        let mut payload = base_payload();
+        let cert = fake_der_cert(376);
+        payload.extend(tlv(TAG_CERTIFICATE, &cert));
+        payload.truncate(payload.len() - 10);
+        assert!(parse_tt_uri(&to_uri(&payload)).is_err());
+    }
+
+    #[test]
+    fn accepts_padded_and_standard_alphabet_base64() {
+        let payload = base_payload();
+        let standard = STANDARD.encode(&payload);
+        let p = parse_tt_uri(&format!("tt://?{}", standard)).unwrap();
+        assert_eq!(p.hostname, "vpn.example.com");
+    }
+
+    #[test]
+    fn accepts_legacy_form_without_question_mark() {
+        let payload = base_payload();
+        let uri = format!("tt://{}", URL_SAFE_NO_PAD.encode(&payload));
+        assert!(parse_tt_uri(&uri).is_ok());
+    }
+
+    #[test]
+    fn client_random_prefix_with_mask() {
+        let mut payload = base_payload();
+        payload.extend(tlv_str(TAG_CLIENT_RANDOM_PREFIX, "5841/7a43"));
+        let p = parse_tt_uri(&to_uri(&payload)).unwrap();
+        assert_eq!(p.client_random, "5841/7a43");
+    }
+
+    #[test]
+    fn varint_two_byte() {
+        let data = [0x41, 0x7C];
+        let mut i = 0;
+        assert_eq!(read_varint(&data, &mut i).unwrap(), 380);
+        assert_eq!(i, 2);
+    }
+
+    #[test]
+    fn extracts_uri_from_text() {
+        assert_eq!(
+            extract_tt_uri("вот ссылка tt://?AAEB смотри").as_deref(),
+            Some("tt://?AAEB")
+        );
+    }
 }

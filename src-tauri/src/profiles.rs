@@ -34,6 +34,12 @@ pub struct Profile {
     pub exclusions: Vec<String>,
     #[serde(default)]
     pub skip_verification: bool,
+    /// PEM certificate chain for endpoint pinning (from tt:// import or TOML).
+    #[serde(default)]
+    pub certificate: String,
+    /// `client_random` value for the endpoint config (`prefix[/mask]` hex).
+    #[serde(default)]
+    pub client_random: String,
     /// User-edited raw TOML overrides everything else when present.
     #[serde(default)]
     pub raw_toml: Option<String>,
@@ -93,6 +99,8 @@ impl Profile {
             post_quantum_group_enabled: true,
             exclusions: vec![],
             skip_verification: false,
+            certificate: String::new(),
+            client_random: String::new(),
             raw_toml: None,
         }
     }
@@ -158,9 +166,9 @@ custom_sni = "{sni}"
 has_ipv6 = {ipv6}
 username = "{user}"
 password = "{pass}"
-client_random = ""
+client_random = "{client_random}"
 skip_verification = {skip}
-certificate = ""
+certificate = "{cert}"
 upstream_protocol = "{proto}"
 anti_dpi = {anti_dpi}
 
@@ -186,7 +194,9 @@ change_system_dns = true
             ipv6 = self.has_ipv6,
             user = toml_escape(&self.username),
             pass = toml_escape(&self.password),
+            client_random = toml_escape(&self.client_random),
             skip = self.skip_verification,
+            cert = toml_escape(&self.certificate),
             proto = proto,
             anti_dpi = self.anti_dpi,
             dns = dns.join(", "),
@@ -235,6 +245,8 @@ change_system_dns = true
             get_str(&endpoint, "upstream_protocol").unwrap_or_else(|| "http2".into());
         let anti_dpi = get_bool(&endpoint, "anti_dpi").unwrap_or(false);
         let skip_verification = get_bool(&endpoint, "skip_verification").unwrap_or(false);
+        let certificate = get_str(&endpoint, "certificate").unwrap_or_default();
+        let client_random = get_str(&endpoint, "client_random").unwrap_or_default();
 
         let mut dns_upstreams = get_str_array(&endpoint, "dns_upstreams");
         if dns_upstreams.is_empty() {
@@ -267,6 +279,8 @@ change_system_dns = true
             post_quantum_group_enabled,
             exclusions,
             skip_verification,
+            certificate,
+            client_random,
             raw_toml: None,
         })
     }
