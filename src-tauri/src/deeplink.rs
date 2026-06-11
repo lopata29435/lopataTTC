@@ -29,9 +29,12 @@ const TAG_DNS_UPSTREAMS: u64 = 0x0D;
 
 /// Parse a `tt://?<payload>` deep-link URI into a Profile.
 pub fn parse_tt_uri(uri: &str) -> Result<Profile> {
-    let stripped = uri
-        .strip_prefix("tt://")
-        .ok_or_else(|| anyhow!("ссылка должна начинаться с tt:// (получено: {})", short(uri, 60)))?;
+    let stripped = uri.strip_prefix("tt://").ok_or_else(|| {
+        anyhow!(
+            "ссылка должна начинаться с tt:// (получено: {})",
+            short(uri, 60)
+        )
+    })?;
 
     // accept "tt://?xxx" and "tt://xxx" and "tt:///?xxx"
     let payload = stripped.trim_start_matches('/').trim_start_matches('?');
@@ -257,8 +260,10 @@ fn parse_tlv_payload(bytes: &[u8]) -> Result<Profile> {
     }
     profile.hostname = hostname;
     profile.addresses = addresses;
-    profile.username = username.ok_or_else(|| anyhow!("в ссылке нет обязательного поля username"))?;
-    profile.password = password.ok_or_else(|| anyhow!("в ссылке нет обязательного поля password"))?;
+    profile.username =
+        username.ok_or_else(|| anyhow!("в ссылке нет обязательного поля username"))?;
+    profile.password =
+        password.ok_or_else(|| anyhow!("в ссылке нет обязательного поля password"))?;
     profile.name = name.unwrap_or_else(|| profile.hostname.clone());
 
     Ok(profile)
@@ -368,7 +373,10 @@ mod tests {
         assert!(p.anti_dpi);
         assert_eq!(p.upstream_protocol, "http2");
         assert!(p.certificate.starts_with("-----BEGIN CERTIFICATE-----\n"));
-        assert!(p.certificate.trim_end().ends_with("-----END CERTIFICATE-----"));
+        assert!(p
+            .certificate
+            .trim_end()
+            .ends_with("-----END CERTIFICATE-----"));
     }
 
     #[test]
